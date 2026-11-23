@@ -89,7 +89,7 @@ explainable. Simplicity beats features.
   code, the owner compares it with the code on the phone and confirms, the key is written to `/etc/phonebox/`.
 - PAM: the phone line **replaces** the existing Howdy (face unlock) line in `/etc/pam.d/sudo` (owner's decision: he
   does not use face unlock). It is the only PAM file touched:
-  `auth sufficient pam_exec.so quiet stdout /usr/local/lib/phonebox/phonebox-unlock`
+  `auth sufficient pam_exec.so quiet /usr/local/lib/phonebox/phonebox-unlock`
   (`sudo-i` includes `sudo`, so `sudo -i` is covered too.)
 - Flow when called by `pam_exec` (user in `PAM_USER`):
   1. **Skip at once (exit 1 → password)** when: no key file for the user; `PAM_RHOST` is set (SSH); there is no
