@@ -8,7 +8,9 @@ Comfort: instead of typing the password, the owner touches the fingerprint senso
 PhoneBox panel, and the Linux PC accepts it for:
 
 1. `sudo` in a terminal,
-2. unlocking the locked GNOME screen.
+2. unlocking the locked GNOME screen,
+3. GNOME's system password dialogs (polkit) — above all **1Password's "unlock with system authentication"**, which
+   also unlocks the 1Password browser extension; also software installs, settings etc. *(Added 2026-11-25.)*
 
 The owner wants to write the code himself from the plan, to learn, so every part must stay small, readable and
 explainable. Simplicity beats features.
@@ -16,6 +18,8 @@ explainable. Simplicity beats features.
 ## Goals
 
 - `sudo` asks the phone first; a fingerprint on the phone is enough. No phone / no answer → normal password prompt.
+- polkit dialogs (1Password unlock, …) ask the phone first the same way; the phone card has **Use password** to end the
+  wait at once; otherwise the password field appears after 10 s; no phone → at once.
 - When the GNOME session is locked, the panel shows an **Unlock PC** button; button + fingerprint unlocks the session.
 - The password always keeps working, at every moment, with no extra delay when the phone is not around.
 - Security: a valid fingerprint answer cannot be forged by anything on the LAN or by a process that only runs as the
@@ -24,7 +28,9 @@ explainable. Simplicity beats features.
 ## Non-goals
 
 - The first login after boot (GDM login screen). Password stays, like macOS Touch ID after a restart.
-- polkit dialogs, Windows, macOS, iOS.
+- 1Password's first unlock after a PC restart (1Password always demands the master password then).
+- Website passwords outside 1Password.
+- Windows, macOS, iOS.
 - Phones older than Android 9 (API 28). The owner's phone is a Xiaomi 2109119DG (Android 11+). On older phones the
   feature is simply not offered.
 - The live-stream CPU / reconnect problem (separate piece of work).
@@ -74,10 +80,10 @@ explainable. Simplicity beats features.
   code: the first 20 hex chars (80 bits) of SHA-256 of the key, in groups of 4 (`AB12 CD34 EF56 7890 1A2B`). The
   agent is untrusted for `sudo`, so the code must come from the Keystore key itself.
 - **The phone decides what it signs, not the agent.** Before the BiometricPrompt opens, the Kotlin code parses the
-  challenge and checks it: prefix `phonebox-unlock-v1`, expiry in the future, purpose `sudo` or `screen`. The prompt
-  text is built from the parsed challenge (“sudo apt install … — peter@fedora” / “Unlock PC — peter@fedora”), never
-  from text the agent sends. The **Unlock PC** button only ever signs a `screen` challenge; the sudo card only a `sudo`
-  one.
+  challenge and checks it: prefix `phonebox-unlock-v1`, expiry in the future, purpose `sudo`, `polkit` or `screen`.
+  The prompt text is built from the parsed challenge (“sudo apt install … — peter@fedora” / “System authentication —
+  peter@fedora” / “Unlock PC — peter@fedora”), never from text the agent sends. The **Unlock PC** button only ever
+  signs a `screen` challenge; the request card only `sudo` or `polkit` ones.
 - One phone, one key (one Keystore alias, one key in the agent, one file per user in `/etc/phonebox/`). Setting it up
   again replaces the key.
 
@@ -88,9 +94,12 @@ explainable. Simplicity beats features.
 - `sudo phonebox-unlock enroll` (run once by the owner): asks the agent for the enrolled public key, prints its check
   code, the owner compares it with the code on the phone and confirms, the key is written to `/etc/phonebox/`.
 - PAM: the phone line **replaces** the existing Howdy (face unlock) line in `/etc/pam.d/sudo` (owner's decision: he
-  does not use face unlock). It is the only PAM file touched:
+  does not use face unlock), and the same line is added at the top of `/etc/pam.d/polkit-1`. These are the only two
+  PAM files touched:
   `auth sufficient pam_exec.so quiet /usr/local/lib/phonebox/phonebox-unlock`
   (`sudo-i` includes `sudo`, so `sudo -i` is covered too.)
+- Two modes, chosen by `PAM_SERVICE`: **`sudo`** (described below) and **`polkit-1`** (differences after the list).
+  Any other service → exit 1.
 - Flow when called by `pam_exec` (user in `PAM_USER`):
   1. **Skip at once (exit 1 → password)** when: no key file for the user; `PAM_RHOST` is set (SSH); there is no
      terminal (`PAM_TTY` empty or not openable — scripts, IDEs); or the user's graphical session is locked (owner is
@@ -107,7 +116,12 @@ explainable. Simplicity beats features.
      - nothing for **20 s** → exit 1.
   5. Verify with `python3-cryptography` (ECDSA P-256, SHA-256) against the key file **and** the exact challenge bytes
      it made itself. Valid and not expired → exit 0 (sudo passes). Anything else → exit 1.
-- Any error, timeout or missing agent → exit 1, so `sudo` just asks for the password. The password therefore always
+- **polkit mode** (`PAM_SERVICE=polkit-1`, run by the setuid-root `polkit-agent-helper-1` behind GNOME's dialog):
+  there is no terminal, so the "no tty" skip and the Enter key do not apply. Skips that remain: no key file, remote
+  (`PAM_RHOST`), session locked. Challenge purpose `polkit`, command `-` (PAM does not tell the helper which polkit
+  action is being authorised). No text is printed. Wait at most **10 s**; the phone's **Use password** answers the
+  request with "cancelled" → the agent ends the long-poll at once → exit 1 → GNOME shows the password field.
+- Any error, timeout or missing agent → exit 1, so `sudo` / the dialog just asks for the password. The password therefore always
   works: phone away → no delay; phone nearby → one Enter.
 
 ### 3. Agent (C#) — messenger + screen unlock
@@ -116,8 +130,8 @@ New file `UnlockService.cs`, opt-in setting `unlock.enabled` (off by default) in
 
 - `POST /api/unlock/enroll` (phone API): store the phone's public key.
 - `GET  /api/unlock/key` (loopback only): the stored public key, for `phonebox-unlock enroll`.
-- `POST /api/unlock/request` (loopback only): from the helper; hold the request (like `ApprovalStore`) and long-poll
-  until the phone answers or 15 s pass.
+- `POST /api/unlock/request` (loopback only): from the helper (purpose `sudo` or `polkit`); hold the request (like
+  `ApprovalStore`) and long-poll until the phone answers (signature or cancel) or the helper's wait ends.
 - `POST /api/unlock/{id}` (phone API): the phone's signature (or “cancelled”).
 - The pending request reaches the phone the same way approvals do (snapshot polled by the panel / live stream event).
 - **Screen lock:** a background check reads the user's graphical session `LockedHint` (`loginctl show-session
@@ -128,8 +142,8 @@ New file `UnlockService.cs`, opt-in setting `unlock.enabled` (off by default) in
 
 ### 4. Panel (JavaScript, `android/app/src/main/assets/www/`)
 
-- A card like the approval card: “sudo for peter on fedora — touch the sensor” → calls the native bridge
-  `unlockSign(key, id, challenge, reason)`, which opens the BiometricPrompt and posts the result.
+- A card like the approval card (title/detail from the native parse of the challenge) with **Use fingerprint** →
+  native bridge opens the BiometricPrompt and posts the result, and **Use password** → posts "cancelled".
 - When `pcLocked` is true: an **Unlock PC** button (overlay, not a widget the owner must place).
 - In settings: **Set up fingerprint unlock** (creates the key, shows the check code) and **Remove**.
 
@@ -145,7 +159,10 @@ New file `UnlockService.cs`, opt-in setting `unlock.enabled` (off by default) in
    password, then with the phone's Wi-Fi off. Undo = restore the backup.
    (Howdy also sits in `/etc/pam.d/gdm-password`; this feature does not touch that file. Removing Howdy there or
    uninstalling it is a separate, optional step for the owner.)
-5. Turn off PhoneBox's self-update while running the fork (it would replace the build with upstream).
+5. Same safety routine for `/etc/pam.d/polkit-1` (backup, root shell open, add the line at the top of the `auth`
+   lines). Test: `pkexec true` → dialog → finger; again → **Use password** → password works; lock 1Password, unlock it
+   with system authentication → finger; phone Wi-Fi off → password field at once.
+6. Turn off PhoneBox's self-update while running the fork (it would replace the build with upstream).
 
 ## Constraints
 
@@ -155,6 +172,10 @@ New file `UnlockService.cs`, opt-in setting `unlock.enabled` (off by default) in
 - `minSdk` stays 21; the feature checks `Build.VERSION.SDK_INT >= 28` at runtime.
 
 ## Accepted risk
+
+polkit challenges carry no command, so the phone can only say "System authentication". A process running as the user
+that triggers a polkit prompt gets the same card as 1Password would. Same mitigations as below; accepted.
+
 
 Like Touch ID for `sudo` on a Mac: malware running as the user could start its own `sudo` and hope for a habitual
 touch. Mitigated by showing the real command (read by the root helper, signed, displayed by the phone from the signed
