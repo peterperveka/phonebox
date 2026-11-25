@@ -17,10 +17,12 @@ import os
 import re
 import secrets
 import select
+import signal
 import socket
 import stat
 import subprocess
 import sys
+import termios
 import time
 import unicodedata
 
@@ -189,15 +191,32 @@ def open_tty(pam_tty: str) -> int:
     return fd
 
 
+class _Deadline(Exception):
+    pass
+
+
+def _on_deadline(signum, frame):
+    raise _Deadline()
+
+
 def _ask_phone(challenge: str, public_key: str, wait: float, tty) -> int:
-    """POST the challenge to the agent, wait for the answer (or Enter on the tty), verify it."""
+    """POST the challenge to the agent, wait for the answer (or Enter on the tty), verify it.
+
+    The whole exchange is bounded by `wait`: select gets the remaining time, and the response
+    reads run under a real-time interval timer plus a socket timeout of the remaining time.
+    """
+    deadline = time.monotonic() + wait
     expires = int(challenge.rsplit("|", 1)[1])
     conn = http.client.HTTPConnection(AGENT_HOST, AGENT_PORT, timeout=1)
+    old_handler = signal.signal(signal.SIGALRM, _on_deadline)
     try:
         conn.request("POST", "/api/unlock/request", body=json.dumps({"challenge": challenge}).encode("utf-8"),
                      headers={"Content-Type": "application/json"})
         watch = [conn.sock] if tty is None else [conn.sock, tty]
-        ready, _, _ = select.select(watch, [], [], wait)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return 1
+        ready, _, _ = select.select(watch, [], [], remaining)
         if not ready:
             return 1
         if tty is not None and tty in ready:
@@ -206,10 +225,16 @@ def _ask_phone(challenge: str, public_key: str, wait: float, tty) -> int:
             except OSError:
                 pass
             return 1
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return 1
+        conn.sock.settimeout(remaining)
+        signal.setitimer(signal.ITIMER_REAL, remaining)
         resp = conn.getresponse()
         if resp.status != 200:
             return 1
         raw = resp.read(MAX_BODY + 1)
+        signal.setitimer(signal.ITIMER_REAL, 0)
         if len(raw) > MAX_BODY:
             return 1
         data = json.loads(raw)
@@ -217,7 +242,11 @@ def _ask_phone(challenge: str, public_key: str, wait: float, tty) -> int:
         if not isinstance(signature, str) or now_ms() > expires:
             return 1
         return 0 if verify(public_key, challenge, signature) else 1
+    except _Deadline:
+        return 1
     finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old_handler)
         conn.close()
 
 
@@ -239,13 +268,26 @@ def _pam(env: dict) -> int:
     challenge = make_challenge("sudo", user, host, command, now_ms())
     tty = open_tty(env["PAM_TTY"])
     try:
+        saved = termios.tcgetattr(tty)
+        quiet = termios.tcgetattr(tty)
+        quiet[3] &= ~termios.ECHO  # keep canonical mode; a password typed before Enter must not show
         os.write(tty, (PROMPT + "\n").encode("utf-8"))
-        return _ask_phone(challenge, key, SUDO_WAIT, tty)
+        termios.tcsetattr(tty, termios.TCSANOW, quiet)
+        try:
+            return _ask_phone(challenge, key, SUDO_WAIT, tty)
+        finally:
+            termios.tcsetattr(tty, termios.TCSAFLUSH, saved)  # restore, dropping any type-ahead
     finally:
         os.close(tty)
 
 
+def _fail(message: str) -> int:
+    print(message, file=sys.stderr)
+    return 1
+
+
 def _enroll(env: dict) -> int:
+    """Interactive (run with sudo): fetch the paired phone key from the agent and store it for $SUDO_USER."""
     if os.geteuid() != 0:
         print("phonebox-unlock enroll must run as root: sudo phonebox-unlock enroll", file=sys.stderr)
         return 2
@@ -259,38 +301,48 @@ def _enroll(env: dict) -> int:
         resp = conn.getresponse()
         raw = resp.read(MAX_BODY + 1)
         status = resp.status
+    except (OSError, http.client.HTTPException):
+        return _fail("Could not reach the PhoneBox agent on this computer. Is it running?")
     finally:
         conn.close()
-    if status != 200 or len(raw) > MAX_BODY:
-        print("No phone key yet: turn on fingerprint unlock in PhoneBox on the phone first.", file=sys.stderr)
-        return 1
-    data = json.loads(raw)
-    public_key = data.get("publicKey") if isinstance(data, dict) else None
-    code = check_code(public_key) if isinstance(public_key, str) else None
-    if code is None:
-        print("The agent returned an invalid key.", file=sys.stderr)
-        return 1
+    if status == 404:
+        return _fail("No phone key yet: turn on fingerprint unlock in PhoneBox on the phone first.")
+    try:
+        if status != 200 or len(raw) > MAX_BODY:
+            raise ValueError("status")
+        data = json.loads(raw)
+        public_key = data.get("publicKey") if isinstance(data, dict) else None
+        code = check_code(public_key) if isinstance(public_key, str) else None
+        if code is None:
+            raise ValueError("key")
+    except ValueError:
+        return _fail("The PhoneBox agent sent an invalid reply.")
     print(f"Check code: {code}")
-    answer = input("Does this match the code on the phone? [y/N] ")
+    try:
+        answer = input("Does this match the code on the phone? [y/N] ")
+    except (EOFError, KeyboardInterrupt):
+        return _fail("\nCancelled. Nothing was saved.")
     if answer.strip().lower() not in ("y", "yes"):
-        print("Not saved.")
-        return 1
-    os.makedirs(KEY_DIR, mode=0o755, exist_ok=True)
-    os.chmod(KEY_DIR, 0o755)
+        return _fail("Cancelled. Nothing was saved.")
     final = os.path.join(KEY_DIR, user + ".pub")
     tmp = os.path.join(KEY_DIR, "." + user + ".pub.tmp")  # never a valid user name, so never read as a key
     try:
-        os.unlink(tmp)
-    except FileNotFoundError:
-        pass
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644)
-    try:
-        os.fchmod(fd, 0o644)
-        os.write(fd, (public_key + "\n").encode("ascii"))
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    os.replace(tmp, final)
+        os.makedirs(KEY_DIR, mode=0o755, exist_ok=True)
+        os.chmod(KEY_DIR, 0o755)
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644)
+        try:
+            os.fchmod(fd, 0o644)
+            os.write(fd, (public_key + "\n").encode("ascii"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(tmp, final)
+    except OSError as e:
+        return _fail(f"Could not save {final}: {e.strerror or e}")
     print(f"Saved {final}")
     return 0
 

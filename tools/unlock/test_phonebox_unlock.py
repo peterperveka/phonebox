@@ -1,11 +1,13 @@
 """Tests for the PhoneBox PAM helper. Run: .venv-unlock/bin/python -m unittest discover -s tools/unlock -v"""
 import base64
+import itertools
 import json
 import os
 import pty
 import re
 import socket
 import tempfile
+import termios
 import threading
 import time
 import unittest
@@ -67,6 +69,15 @@ class FakeAgent:
                 except OSError:
                     pass
                 self.peer_closed.set()
+                return
+            if answer == "dribble":
+                try:
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n")
+                    for _ in range(100):
+                        time.sleep(0.05)
+                        conn.sendall(b"x")
+                except OSError:
+                    pass
                 return
             status, payload = answer
             reason = {200: "OK", 204: "No Content", 400: "Bad Request"}[status]
@@ -199,6 +210,10 @@ class PureFunctions(unittest.TestCase):
         self.assertRegex(pu.check_code(pub), r"^[0-9A-F]{4}( [0-9A-F]{4}){4}$")
         self.assertIsNone(pu.check_code("!!"))
 
+    def test_is_locked_fails_closed(self):
+        with mock.patch.object(pu, "LOGINCTL", "/nonexistent/loginctl"):
+            self.assertTrue(pu.is_locked("alice"))
+
     def test_valid_user(self):
         self.assertTrue(pu.valid_user("alice"))
         for bad in ("", None, "../etc/x", "a/b", ".hidden", "..", "a\x00b", "a" * 65):
@@ -213,9 +228,11 @@ class KeyFile(Base):
         self.assertIsNone(pu.load_key("bob"))
 
     def test_bad_user_never_touches_disk(self):
-        with mock.patch("os.open", side_effect=AssertionError("opened")):
+        with mock.patch("os.open") as op, mock.patch("os.stat") as st:
             self.assertIsNone(pu.load_key("../alice"))
             self.assertIsNone(pu.load_key(".alice"))
+        op.assert_not_called()
+        st.assert_not_called()
 
     def test_writable_key_is_rejected(self):
         os.chmod(self.keyfile, 0o666)
@@ -289,7 +306,7 @@ class SudoFlow(Base):
         agent = FakeAgent(lambda ch: (200, json.dumps({"signature": sign(self.priv, ch)}).encode()))
         self.addCleanup(agent.close)
         real = pu.now_ms()
-        times = iter([real, real + 31_000])
+        times = itertools.chain([real], itertools.repeat(real + 31_000))
         with mock.patch.object(pu, "now_ms", lambda: next(times)):
             self.assertEqual(self.run_main(env, agent.port)[0], 1)
 
@@ -312,29 +329,78 @@ class SudoFlow(Base):
         self.assertEqual(rc, 1)
         self.assertLess(took, 1.5)
 
+    def assert_skipped(self, env):
+        """main returns 1 without building a challenge, opening a tty or contacting the agent."""
+        with mock.patch("http.client.HTTPConnection") as http, \
+                mock.patch.object(pu, "make_challenge") as mk, mock.patch.object(pu, "open_tty") as tty:
+            self.assertEqual(pu.main(["x"], env), 1, env)
+        http.assert_not_called()
+        mk.assert_not_called()
+        tty.assert_not_called()
+
     def test_skips_without_contacting_agent(self):
+        _, env = self.pty_env()
         cases = [
-            {"PAM_SERVICE": "login", "PAM_USER": "alice", "PAM_TTY": "/dev/pts/1"},
-            {"PAM_SERVICE": "sudo", "PAM_USER": "bob", "PAM_TTY": "/dev/pts/1"},
-            {"PAM_SERVICE": "sudo", "PAM_USER": "alice", "PAM_TTY": "/dev/pts/1", "PAM_RHOST": "h"},
-            {"PAM_SERVICE": "sudo", "PAM_USER": "alice"},
-            {"PAM_SERVICE": "sudo", "PAM_USER": "../alice", "PAM_TTY": "/dev/pts/1"},
-            {"PAM_SERVICE": "sudo", "PAM_TTY": "/dev/pts/1"},
+            {**env, "PAM_SERVICE": "login"},
+            {**env, "PAM_USER": "bob"},
+            {**env, "PAM_RHOST": "h"},
+            {k: v for k, v in env.items() if k != "PAM_TTY"},
+            {**env, "PAM_TTY": ""},
+            {**env, "PAM_USER": "../alice"},
+            {k: v for k, v in env.items() if k != "PAM_USER"},
         ]
-        with mock.patch("http.client.HTTPConnection", side_effect=AssertionError("contacted agent")):
-            for env in cases:
-                self.assertEqual(pu.main(["x"], env), 1, env)
+        for case in cases:
+            self.assert_skipped(case)
 
     def test_locked_skips(self):
         _, env = self.pty_env()
-        with mock.patch.object(pu, "is_locked", lambda user: True), \
-                mock.patch("http.client.HTTPConnection", side_effect=AssertionError("contacted agent")):
-            self.assertEqual(pu.main(["x"], env), 1)
+        with mock.patch.object(pu, "is_locked", lambda user: True):
+            self.assert_skipped(env)
 
     def test_tty_outside_dev_is_refused(self):
         env = {"PAM_SERVICE": "sudo", "PAM_USER": "alice", "PAM_TTY": "/dev/../tmp/x"}
-        with mock.patch("http.client.HTTPConnection", side_effect=AssertionError("contacted agent")):
+        with mock.patch("http.client.HTTPConnection") as http, mock.patch("os.open", wraps=os.open) as op:
             self.assertEqual(pu.main(["x"], env), 1)
+        http.assert_not_called()
+        self.assertNotIn("/tmp/x", [c.args[0] for c in op.call_args_list])
+
+    def test_echo_is_off_while_waiting_and_restored(self):
+        master, env = self.pty_env()
+        slave = os.open(env["PAM_TTY"], os.O_RDWR | os.O_NOCTTY)
+        self.addCleanup(os.close, slave)
+        before = termios.tcgetattr(slave)
+        self.assertTrue(before[3] & termios.ECHO)
+        agent = FakeAgent(lambda ch: None)
+        self.addCleanup(agent.close)
+        seen = {}
+
+        def press():
+            seen["lflag"] = termios.tcgetattr(slave)[3]
+            os.write(master, b"\n")
+        threading.Timer(0.3, press).start()
+        self.assertEqual(self.run_main(env, agent.port)[0], 1)
+        self.assertFalse(seen["lflag"] & termios.ECHO, "echo was on while waiting")
+        self.assertTrue(seen["lflag"] & termios.ICANON)
+        self.assertEqual(termios.tcgetattr(slave), before)
+
+    def test_echo_restored_after_answer(self):
+        _, env = self.pty_env()
+        slave = os.open(env["PAM_TTY"], os.O_RDWR | os.O_NOCTTY)
+        self.addCleanup(os.close, slave)
+        before = termios.tcgetattr(slave)
+        agent = FakeAgent(lambda ch: (200, json.dumps({"signature": sign(self.priv, ch)}).encode()))
+        self.addCleanup(agent.close)
+        self.assertEqual(self.run_main(env, agent.port)[0], 0)
+        self.assertEqual(termios.tcgetattr(slave), before)
+
+    def test_dribbling_agent_is_bounded_by_the_wait(self):
+        _, env = self.pty_env()
+        agent = FakeAgent(lambda ch: "dribble")
+        self.addCleanup(agent.close)
+        with mock.patch.object(pu, "SUDO_WAIT", 0.5):
+            rc, took = self.run_main(env, agent.port)
+        self.assertEqual(rc, 1)
+        self.assertLess(took, 1.2)
 
     def test_unexpected_error_returns_1_silently(self):
         _, env = self.pty_env()
@@ -352,12 +418,12 @@ class PolkitFlow(Base):
         agent = FakeAgent(lambda ch: None)
         self.addCleanup(agent.close)
         with mock.patch.object(pu, "AGENT_PORT", agent.port), mock.patch.object(pu, "POLKIT_WAIT", 0.2), \
-                mock.patch.object(pu, "open_tty", side_effect=AssertionError("tty opened")), \
-                mock.patch("sys.stdout") as out:
+                mock.patch.object(pu, "open_tty") as tty, mock.patch("sys.stdout") as out:
             t0 = time.monotonic()
             rc = pu.main(["phonebox-unlock"], dict(self.env))
             took = time.monotonic() - t0
         self.assertEqual(rc, 1)
+        tty.assert_not_called()
         self.assertLess(took, 1)
         out.write.assert_not_called()
         self.assertEqual(agent.challenge.split("|")[1], "polkit")
@@ -366,9 +432,17 @@ class PolkitFlow(Base):
     def test_polkit_good_signature_accepts(self):
         agent = FakeAgent(lambda ch: (200, json.dumps({"signature": sign(self.priv, ch)}).encode()))
         self.addCleanup(agent.close)
-        with mock.patch.object(pu, "AGENT_PORT", agent.port), \
-                mock.patch.object(pu, "open_tty", side_effect=AssertionError("tty opened")):
+        with mock.patch.object(pu, "AGENT_PORT", agent.port), mock.patch.object(pu, "open_tty") as tty:
             self.assertEqual(pu.main(["x"], dict(self.env)), 0)
+        tty.assert_not_called()
+
+    def test_polkit_dribbling_agent_is_bounded_by_the_wait(self):
+        agent = FakeAgent(lambda ch: "dribble")
+        self.addCleanup(agent.close)
+        with mock.patch.object(pu, "AGENT_PORT", agent.port), mock.patch.object(pu, "POLKIT_WAIT", 0.5):
+            t0 = time.monotonic()
+            self.assertEqual(pu.main(["x"], dict(self.env)), 1)
+            self.assertLess(time.monotonic() - t0, 1.2)
 
     def test_polkit_204_rejects(self):
         agent = FakeAgent(lambda ch: (204, b""))
@@ -407,10 +481,28 @@ class Enroll(Base):
 
     def enroll(self, port, answer, euid=0, sudo_user="alice"):
         env = {"SUDO_USER": sudo_user} if sudo_user else {}
+        inp = {"side_effect": answer} if isinstance(answer, BaseException) else {"return_value": answer}
         with mock.patch.object(pu, "AGENT_PORT", port), mock.patch("os.geteuid", return_value=euid), \
-                mock.patch("builtins.input", return_value=answer), mock.patch("builtins.print") as pr:
+                mock.patch("builtins.input", **inp), mock.patch("builtins.print") as pr:
             rc = pu.main(["phonebox-unlock", "enroll"], env)
         return rc, " ".join(str(a) for c in pr.call_args_list for a in c.args)
+
+    def test_enroll_agent_down_says_so(self):
+        rc, out = self.enroll(closed_port(), "y")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("agent", out.lower())
+
+    def test_enroll_bad_reply_says_so(self):
+        rc, out = self.enroll(self.serve_key(body=["x"]), "y")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("invalid", out.lower())
+
+    def test_enroll_cancelled_says_so(self):
+        for exc in (EOFError(), KeyboardInterrupt()):
+            rc, out = self.enroll(self.serve_key(), exc)
+            self.assertNotEqual(rc, 0)
+            self.assertIn("cancelled", out.lower())
+            self.assertFalse(os.path.exists(os.path.join(self.dir, "alice.pub")))
 
     def test_enroll_writes_key_on_yes(self):
         rc, out = self.enroll(self.serve_key(), "y")
@@ -438,8 +530,9 @@ class Enroll(Base):
             self.assertNotEqual(rc, 0)
 
     def test_enroll_not_enrolled(self):
-        rc, _ = self.enroll(self.serve_key(status=404, body={}), "y")
+        rc, out = self.enroll(self.serve_key(status=404, body={}), "y")
         self.assertNotEqual(rc, 0)
+        self.assertIn("no phone key", out.lower())
 
     def test_enroll_rejects_bad_key(self):
         _, p384 = new_key(ec.SECP384R1())
