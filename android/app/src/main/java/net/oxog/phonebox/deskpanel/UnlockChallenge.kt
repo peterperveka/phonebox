@@ -52,6 +52,13 @@ object UnlockChallenge {
         return if (acceptable(p, MODE_SCREEN, nowMs)) screen else null
     }
 
+    /**
+     * The quick unlock right after the phone woke may only answer a lock that started before the wake: [lockedForMs]
+     * (from the agent, null when it is not locked or does not say) must be at least [sinceResumeMs]. Otherwise a
+     * fingerprint used for something else just before Super+L would unlock the PC again at once.
+     */
+    fun lockedBeforeResume(lockedForMs: Long?, sinceResumeMs: Long): Boolean = lockedForMs != null && lockedForMs >= sinceResumeMs
+
     fun promptTitle(p: Parts): String {
         val who = "${clean(p.user)}@${clean(p.host)}"
         return when (p.purpose) {

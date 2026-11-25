@@ -17,7 +17,8 @@ package net.oxog.phonebox.deskpanel
  * Quick try: when the listener becomes active within [QUICK_MS] of the panel coming back to the front, it first runs
  * [tryNow] (on [background]) without the sensor: the phone's own fingerprint unlock may already have opened the key.
  * true/false report "unlocked"/"failed", null (no recent fingerprint) reports nothing; the sensor starts afterwards.
- * Only right after a resume, so a fingerprint used for something else just before the PC locks never unlocks it.
+ * Only right after a resume; [tryNow] also checks that the PC was already locked before that resume, so a fingerprint
+ * used for something else just before the PC locks never unlocks it.
  */
 class UnlockListener<S>(
     private val sensor: Sensor<S>,

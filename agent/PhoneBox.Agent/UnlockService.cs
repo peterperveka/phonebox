@@ -41,9 +41,16 @@ public sealed class UnlockService : BackgroundService
     private string? _issued;
     private long _issuedExpires;
     private volatile bool _locked;
+    private long _lockedSince;
 
     /// <summary>True while the screen is locked; always false unless Linux and the feature is enabled.</summary>
     public bool Locked => _locked;
+
+    /// <summary>
+    /// How long the screen has been locked (ms, from when this service saw the lock), or null while it is not. The
+    /// phone compares it with how long ago it woke, so a fingerprint used before the lock never unlocks it.
+    /// </summary>
+    public long? LockedForMs() => _locked ? clock.GetUtcNow().ToUnixTimeMilliseconds() - Interlocked.Read(ref _lockedSince) : null;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -69,6 +76,7 @@ public sealed class UnlockService : BackgroundService
             now = id is not null && session.IsLocked(id);
         }
         if (now == _locked) return;
+        if (now) Interlocked.Exchange(ref _lockedSince, clock.GetUtcNow().ToUnixTimeMilliseconds());
         _locked = now;
         if (!now) lock (_lock) _issued = null;
         events.Emit("unlock", JsonSerializer.SerializeToElement(new { locked = now }));

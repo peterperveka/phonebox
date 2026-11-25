@@ -197,4 +197,18 @@ public sealed class UnlockServiceTests : IDisposable
         Assert.False(UnlockService.CanEnroll(new UnlockConfig { Enabled = false }));
         Assert.True(UnlockService.CanEnroll(new UnlockConfig { Enabled = true }));
     }
+
+    [Fact]
+    public void LockedForCountsFromWhenTheLockWasSeen()
+    {
+        var svc = Make(locked: false);
+        Assert.Null(svc.LockedForMs());
+        _session.Locked = true;
+        svc.Refresh();
+        _clock.Now += 4_000;
+        Assert.Equal(4_000, svc.LockedForMs());
+        _session.Locked = false;
+        svc.Refresh();
+        Assert.Null(svc.LockedForMs());
+    }
 }

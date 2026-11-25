@@ -82,6 +82,8 @@ class MainActivity : Activity(), SensorEventListener {
     private lateinit var link: AgentLink
     private lateinit var stream: AgentStream
     @Volatile private var resumed = false
+    /** elapsedRealtime of the last onResume: the quick unlock only answers a PC lock older than that. */
+    @Volatile private var resumedAt = 0L
     @Volatile private var volumeKeysFlipPages = true
     /** True while a fingerprint unlock (prompt + answer) is in progress; a second one is ignored. */
     private val unlockBusy = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -97,7 +99,7 @@ class MainActivity : Activity(), SensorEventListener {
             background = { Thread(it).start() },
             main = { runOnUiThread(it) },
             later = { standbyHandler.postDelayed(it, 1000) },
-            tryNow = { signScreenNow() },
+            tryNow = { signScreenNow(quick = true) },
             now = { android.os.SystemClock.elapsedRealtime() },
         )
     }
@@ -684,6 +686,7 @@ class MainActivity : Activity(), SensorEventListener {
         standbyDismissKeyguard()
         web.onResume()
         web.evaluateJavascript("window.onAppPause && window.onAppPause(false)", null) // the panel catches up at once
+        resumedAt = android.os.SystemClock.elapsedRealtime()
         if (Build.VERSION.SDK_INT >= 28) unlockListener.visible(true)
         stream.start()
         hideSystemUi()
@@ -807,13 +810,24 @@ class MainActivity : Activity(), SensorEventListener {
      * within the last few seconds, and sends it. Blocking; call off the UI thread. True when the PC unlocked, false
      * when it refused or could not be reached, null when there is nothing to unlock (the PC is no longer locked) or no
      * recent fingerprint opened the key.
+     *
+     * [quick] (the try right after the phone woke, nobody touched the sensor): nothing is fetched unless a fingerprint
+     * opened the key, an unreachable agent is not a failure (null), and only a PC lock older than the wake counts.
      */
     @RequiresApi(28)
-    private fun signScreenNow(): Boolean? = try {
+    private fun signScreenNow(quick: Boolean = false): Boolean? =
+        if (quick && UnlockKey(this).signNow(byteArrayOf(0)) == null) null else sendScreenSignature(quick)
+
+    @RequiresApi(28)
+    private fun sendScreenSignature(quick: Boolean): Boolean? = try {
         val r = link.request("GET", "/api/unlock/state")
         val text = r.body.use { it.readBytes().toString(Charsets.UTF_8) }
-        if (r.code != 200) false
-        else when (val challenge = UnlockChallenge.pickScreen(JSONObject(text).optString("screen", ""), System.currentTimeMillis())) {
+        val state = if (r.code == 200) JSONObject(text) else null
+        val sinceResume = android.os.SystemClock.elapsedRealtime() - resumedAt
+        val lockedFor = state?.takeIf { it.has("lockedForMs") && !it.isNull("lockedForMs") }?.optLong("lockedForMs")
+        if (state == null) { if (quick) null else false }
+        else if (quick && !UnlockChallenge.lockedBeforeResume(lockedFor, sinceResume)) null
+        else when (val challenge = UnlockChallenge.pickScreen(state.optString("screen", ""), System.currentTimeMillis())) {
             null -> null
             else -> {
                 when (val raw = UnlockKey(this).signNow(challenge.toByteArray(Charsets.UTF_8))) {
@@ -825,7 +839,7 @@ class MainActivity : Activity(), SensorEventListener {
         }
     } catch (e: Exception) {
         Log.w("PhoneBox", "screen unlock failed: ${e.javaClass.simpleName}")
-        false
+        if (quick) null else false
     }
 
     inner class Bridge {

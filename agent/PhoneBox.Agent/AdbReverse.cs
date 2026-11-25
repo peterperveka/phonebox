@@ -584,9 +584,13 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log, AgentEn
         if (locked) await Adb(adb, ["-s", device, "shell", "input", "keyevent", "KEYCODE_SLEEP"], ct);
         else
         {
-            await Adb(adb, ["-s", device, "shell", "input", "keyevent", "KEYCODE_WAKEUP"], ct);
+            // Some phones refuse injected keys over USB (Xiaomi without "USB debugging (Security settings)"); am start
+            // needs no key injection, so the panel still comes up.
+            try { await Adb(adb, ["-s", device, "shell", "input", "keyevent", "KEYCODE_WAKEUP"], ct); }
+            catch (IOException ex) { log.LogDebug(ex, "{Device}: wake key refused", device); }
             // A secure PIN/password keyguard still needs the user's unlock.
-            await Adb(adb, ["-s", device, "shell", "wm", "dismiss-keyguard"], ct);
+            try { await Adb(adb, ["-s", device, "shell", "wm", "dismiss-keyguard"], ct); }
+            catch (IOException ex) { log.LogDebug(ex, "{Device}: dismiss-keyguard refused", device); }
             await Adb(adb, ["-s", device, "shell", "am", "start", "-n", PanelActivity], ct);
         }
         log.LogInformation("{Device}: phone screen {State}", device, locked ? "asleep" : "awake");

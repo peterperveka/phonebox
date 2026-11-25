@@ -107,7 +107,11 @@ builder.Services.AddSingleton<CommandRunner>();
 builder.Services.AddSingleton<ApprovalStore>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<UnlockStore>();
+#if WINDOWS
+builder.Services.AddSingleton<ILoginSession, NoLoginSession>();
+#else
 builder.Services.AddSingleton<ILoginSession, LoginSession>();
+#endif
 builder.Services.AddSingleton<UnlockService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UnlockService>());
 builder.Services.AddSingleton<HomeAssistant>();
@@ -1034,7 +1038,7 @@ app.MapGet("/api/unlock/state", (ConfigStore cfg, UnlockService unlock, UnlockSt
     var u = cfg.Get().Unlock;
     var enrolled = !string.IsNullOrEmpty(u.PublicKey);
     if (!u.Enabled) return Results.Json(new { enabled = false, enrolled, locked = false, screen = (string?)null, request = (UnlockRequest?)null });
-    return Results.Json(new { enabled = true, enrolled, locked = unlock.Locked, screen = unlock.ScreenChallenge(), request = store.Pending() });
+    return Results.Json(new { enabled = true, enrolled, locked = unlock.Locked, lockedForMs = unlock.LockedForMs(), screen = unlock.ScreenChallenge(), request = store.Pending() });
 });
 app.MapPost("/api/unlock/enroll", async (HttpRequest req, ConfigStore cfg, ILogger<Program> log) =>
 {

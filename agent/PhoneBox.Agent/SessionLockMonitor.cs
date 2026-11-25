@@ -8,6 +8,7 @@ public sealed class SessionLockMonitor(ConfigStore cfg, AdbReverse adb, ILogger<
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         var warned = false;
+        string? lastFailure = null;
         while (!ct.IsCancellationRequested)
         {
             try
@@ -26,12 +27,16 @@ public sealed class SessionLockMonitor(ConfigStore cfg, AdbReverse adb, ILogger<
                     await adb.ResetSessionAsync(ct);
                     warned = false;
                 }
+                lastFailure = null;
                 await Task.Delay(TimeSpan.FromSeconds(1), ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
             catch (Exception ex)
             {
-                log.LogWarning(ex, "Could not follow the computer lock");
+                // the same failure every 5 s (e.g. a phone that refuses injected keys) is logged once, not 720 times an hour
+                var what = ex.Message;
+                if (what != lastFailure) log.LogWarning(ex, "Could not follow the computer lock (a phone that refuses key presses over USB needs \"USB debugging (Security settings)\" on Xiaomi)");
+                lastFailure = what;
                 await Task.Delay(TimeSpan.FromSeconds(5), ct);
             }
         }

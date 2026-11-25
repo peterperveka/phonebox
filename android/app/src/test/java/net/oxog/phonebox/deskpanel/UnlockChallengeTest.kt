@@ -28,6 +28,12 @@ class UnlockChallengeTest {
         assertNull(UnlockChallenge.pickScreen("", now))
     }
 
+    @Test fun quickUnlockOnlyWhenThePcWasLockedBeforeThePhoneWoke() {
+        assertTrue(UnlockChallenge.lockedBeforeResume(lockedForMs = 60_000, sinceResumeMs = 800))
+        assertFalse(UnlockChallenge.lockedBeforeResume(lockedForMs = 500, sinceResumeMs = 3_500))
+        assertFalse(UnlockChallenge.lockedBeforeResume(lockedForMs = null, sinceResumeMs = 800))
+    }
+
     @Test fun parsesAGoodChallenge() {
         val p = UnlockChallenge.parse(challenge("sudo", "sudo dnf up"))
         assertEquals(UnlockChallenge.Parts("sudo", "peter", "fedora", "sudo dnf up", nonce, 2000L), p)
