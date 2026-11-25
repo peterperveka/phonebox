@@ -94,3 +94,31 @@ test('a phone that lost its key is offered setup again', async ({ page }) => {
   await open(page, { code: '', state: { enabled: true, enrolled: true, locked: false, screen: null, request: null } });
   await expect(page.locator('#ukSetup')).toBeVisible();
 });
+
+test('an approval stays answerable once the unlock card is gone', async ({ page }) => {
+  await open(page, { state: { enabled: true, enrolled: true, locked: false, screen: null, request: { id: 'r1', challenge: 'chal' } } });
+  await page.evaluate(async () => {
+    const m = await import('/panel/main.js');
+    m.approvals.splice(0, m.approvals.length, { id: 'a1', kind: 'permission', source: 'Claude', tool: 'Bash', project: 'p', cwd: '/x' });
+    m.renderApproval();
+  });
+  await expect(card(page)).toBeVisible();
+  await expect(page.locator('#approval')).toBeVisible();
+  await page.evaluate(async () => {
+    window.__state = { enabled: true, enrolled: true, locked: false, screen: null, request: null };
+    const m = await import('/panel/main.js');
+    await m.loadUnlock();
+  });
+  await expect(card(page)).toBeHidden();
+  await expect(page.locator('#approval')).toBeVisible();
+  await page.locator('#apDeny').click({ trial: true });
+});
+
+test('the card buttons come back after a failed signing', async ({ page }) => {
+  await open(page, { state: { enabled: true, enrolled: true, locked: false, screen: null, request: { id: 'r1', challenge: 'chal' } } });
+  await page.locator('#ukFp').click();
+  await expect(page.locator('#ukPw')).toBeDisabled();
+  await page.evaluate(() => window.pbUnlockDone('r1', false));
+  await expect(page.locator('#ukPw')).toBeEnabled();
+  await expect(page.locator('#ukFp')).toBeEnabled();
+});

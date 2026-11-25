@@ -1426,6 +1426,8 @@ let unlockBusy = false;
 let unlockShown = null;     // request id the card is for
 let unlockPromptText = null; // {title, detail} for that id, or null when the app gave none
 let unlockSigning = false;
+let codeMissing = null;   // cached: does this phone lack a usable key? Refreshed on setup, wake and when enrolled changes
+let codeFor;               // the `enrolled` value the cache was read for
 let unlockMsgTimer = 0;
 
 export async function loadUnlock() {
@@ -1451,6 +1453,11 @@ function unlockMessage(text, ms) {
   $('ukMsg').textContent = text || '';
   if (text) unlockMsgTimer = setTimeout(() => { $('ukMsg').textContent = ''; renderUnlock(); }, ms);
   renderUnlock();
+}
+
+function refreshUnlockCode(enrolled = codeFor) {
+  codeFor = enrolled;
+  try { codeMissing = bridge.unlockCode() === ''; } catch (_) { codeMissing = false; }
 }
 
 export function renderUnlock() {
@@ -1481,9 +1488,8 @@ export function renderUnlock() {
   card.hidden = !(r && unlockPromptText);
   // the bar: Unlock PC while the screen is locked, and the setup button until this phone is enrolled
   const showScreen = !!(s.locked && s.screen);
-  let setup = false;
-  if (!s.enrolled) setup = true;
-  else { try { setup = bridge.unlockCode() === ''; } catch (_) {} }
+  if (codeFor !== s.enrolled) refreshUnlockCode(s.enrolled);
+  const setup = !s.enrolled || codeMissing === true;
   $('ukScreen').hidden = !showScreen;
   $('ukSetup').hidden = !setup;
   $('ukMsg').hidden = !$('ukMsg').textContent;
@@ -1518,6 +1524,7 @@ $('ukSetup').addEventListener('click', () => {
   haptic();
   let code = '';
   try { code = bridge.unlockSetup() || ''; } catch (_) {}
+  refreshUnlockCode();
   // the code is shown for 30 s so it can be compared with the one the PC prints
   unlockMessage(code ? `${code} · ${t('unlock.compare')}` : t('unlock.failed'), code ? 30000 : 4000);
 });
@@ -1526,6 +1533,7 @@ $('ukSetup').addEventListener('click', () => {
 window.pbUnlockDone = (id, ok) => {
   unlockSigning = false;
   $('ukScreen').disabled = false;
+  $('ukFp').disabled = $('ukPw').disabled = false;
   if (!ok) unlockMessage(t('unlock.failed'), 4000);
   loadUnlock();
 };
@@ -2897,7 +2905,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && !a
 // what the paused panel skipped is fetched at once, not at the next interval
 function wokeUp() {
   if (!online) return;
-  loadConfig(); loadPush(); loadApprovals(); loadUnlock();
+  loadConfig(); loadPush(); loadApprovals(); if (unlockState) refreshUnlockCode(); loadUnlock();
   watchMedia(true);
   if (anyNeeds('quotas')) loadQuotas();
   if (anyNeeds('calendar')) loadCalendar();
