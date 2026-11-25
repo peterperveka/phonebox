@@ -433,11 +433,11 @@ open, test in a new terminal, undo ready.
   - phone Wi-Fi off → `sudo -k; sudo true` → password prompt with no delay
   - `sudo -k; echo | sudo -S true` (no tty) → password path, no phone card
   - `ssh localhost sudo -k true` (if sshd runs) → no phone card
-- [ ] **Step 7: polkit / 1Password.** Root shell still open. `sudo cp /etc/pam.d/polkit-1 /etc/pam.d/polkit-1.bak`, then add the same `auth sufficient pam_exec.so quiet /usr/local/lib/phonebox/phonebox-unlock` line **above** `auth include system-auth`. Test:
+- [ ] **Step 7: polkit / 1Password.** Root shell still open. Fedora has no `/etc/pam.d/polkit-1` (only the vendor `/usr/lib/pam.d/polkit-1`, and an `/etc` file replaces it completely), so `sudo cp /usr/lib/pam.d/polkit-1 /etc/pam.d/polkit-1`, then add the same `auth sufficient pam_exec.so quiet /usr/local/lib/phonebox/phonebox-unlock` line **above** `auth include system-auth` in the new `/etc/pam.d/polkit-1`. Test:
   - `pkexec true` → GNOME dialog, phone card "System authentication — …" → fingerprint → passes
   - `pkexec true` → **Use password** on the phone → password field at once → password works
   - `pkexec true` → do nothing → password field after ~10 s
   - lock 1Password, unlock with system authentication → fingerprint → unlocked; the Brave extension is unlocked too
   - phone Wi-Fi off → `pkexec true` → password field at once
-- [ ] **Step 8:** Undo if anything is wrong (from the root shell): `cp /etc/pam.d/sudo.bak /etc/pam.d/sudo`, `cp /etc/pam.d/polkit-1.bak /etc/pam.d/polkit-1`.
+- [ ] **Step 8:** Undo if anything is wrong (from the root shell): `cp /etc/pam.d/sudo.bak /etc/pam.d/sudo`, `rm /etc/pam.d/polkit-1` (polkit falls back to the vendor file).
 - [ ] **Step 9: Commit** (agents, before handing over) `docs(unlock): install, test and undo steps`

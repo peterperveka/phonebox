@@ -84,29 +84,43 @@ explainable. Simplicity beats features.
   The prompt text is built from the parsed challenge (“sudo apt install … — peter@fedora” / “System authentication —
   peter@fedora” / “Unlock PC — peter@fedora”), never from text the agent sends. The **Unlock PC** button only ever
   signs a `screen` challenge; the request card only `sudo` or `polkit` ones.
-- One phone, one key (one Keystore alias, one key in the agent, one file per user in `/etc/phonebox/`). Setting it up
-  again replaces the key.
+- One phone, one key (one active Keystore alias, one key in the agent, one file per user in `/etc/phonebox/`). Setting
+  it up again replaces the key, but only once the agent accepted the new one: the new key is made under a spare alias
+  (`phonebox-unlock-a`/`-b`, the active one named in a preference) and the old one is deleted after HTTP 200, so a
+  failed re-setup keeps the working key. After a new setup the owner runs
+  `sudo /usr/local/lib/phonebox/phonebox-unlock enroll` again (the setup message says so).
+- `/api/unlock/enroll` is refused (403) while `unlock.enabled` is off. For the screen unlock the agent prefers the
+  root-owned `/etc/phonebox/<user>.pub` when it exists (an unreadable/missing file falls back to the enrolled key; a
+  file with invalid content refuses), so a key enrolled later from another paired device cannot unlock the screen.
 
 ### 2. Sudo helper (Python, root-owned) — `phonebox-unlock`
 
 - Installed to `/usr/local/lib/phonebox/phonebox-unlock` (root:root, 0755). Public key per user in
   `/etc/phonebox/<user>.pub` (root:root, 0644).
-- `sudo phonebox-unlock enroll` (run once by the owner): asks the agent for the enrolled public key, prints its check
+- `sudo /usr/local/lib/phonebox/phonebox-unlock enroll` (run once by the owner, and again after every new phone setup): asks the agent for the enrolled public key, prints its check
   code, the owner compares it with the code on the phone and confirms, the key is written to `/etc/phonebox/`.
 - PAM: the phone line **replaces** the existing Howdy (face unlock) line in `/etc/pam.d/sudo` (owner's decision: he
-  does not use face unlock), and the same line is added at the top of `/etc/pam.d/polkit-1`. These are the only two
-  PAM files touched:
+  does not use face unlock), and the same line is added at the top of `/etc/pam.d/polkit-1`, which is first copied
+  from the vendor file `/usr/lib/pam.d/polkit-1` (on Fedora there is no `/etc/pam.d/polkit-1`; a file there replaces
+  the vendor stack completely). These are the only two PAM files touched:
   `auth sufficient pam_exec.so quiet /usr/local/lib/phonebox/phonebox-unlock`
   (`sudo-i` includes `sudo`, so `sudo -i` is covered too.)
 - Two modes, chosen by `PAM_SERVICE`: **`sudo`** (described below) and **`polkit-1`** (differences after the list).
   Any other service → exit 1.
 - Flow when called by `pam_exec` (user in `PAM_USER`):
-  1. **Skip at once (exit 1 → password)** when: no key file for the user; `PAM_RHOST` is set (SSH); there is no
-     terminal (`PAM_TTY` empty or not openable — scripts, IDEs); or the user's graphical session is locked (owner is
-     away).
+  1. **Skip at once (exit 1 → password)** when: no key file for the user; `PAM_RHOST` is set; there is no
+     terminal (`PAM_TTY` empty or not openable — scripts, IDEs); the user's graphical session is locked (owner is
+     away); or the request is not from a local session ("remote"). sudo does not set `PAM_RHOST`, so the helper finds
+     the requester's logind session itself: it walks up from its parent pid via `/proc/<pid>/stat` (at most 8 hops)
+     until a `/proc/<pid>/cgroup` names a `session-<N>.scope`, then reads `loginctl show-session <N> -p Remote -p Type`
+     and goes on only if `Remote=no` (polkit additionally needs `Type` `wayland` or `x11`). GNOME starts terminals and
+     gnome-shell in the user's systemd manager (`user@<uid>.service`), outside any session scope; that case is vouched
+     for by the user's graphical `Display` session (`Remote=no`, `Type` wayland/x11). No session found, or any error,
+     → skip.
   2. Make the challenge: `phonebox-unlock-v1|sudo|<user>|<hostname>|<command>|<32 random bytes, hex>|<expiry unix ms>`.
-     `<command>` is the `sudo …` command line, read by the helper (root) from `/proc/<parent pid>/cmdline`, shortened
-     to 120 chars, with `|` and control characters removed.
+     `<command>` is the `sudo …` command line, read by the helper (root) from `/proc/<parent pid>/cmdline`, with `|`
+     and control characters removed and at most 120 chars (a cut command ends in `…`). The phone shows it in the
+     prompt's multi-line description.
   3. Print to the terminal: **“Touch the sensor on the phone, or press Enter to type the password.”**
   4. `POST http://127.0.0.1:8765/api/unlock/request` with the challenge. The agent answers at once with “no phone” if no
      phone was seen in the last 5 s (existing `ApprovalStore.PhoneConnected`) → exit 1. Otherwise the helper waits
@@ -118,7 +132,7 @@ explainable. Simplicity beats features.
      it made itself. Valid and not expired → exit 0 (sudo passes). Anything else → exit 1.
 - **polkit mode** (`PAM_SERVICE=polkit-1`, run by the setuid-root `polkit-agent-helper-1` behind GNOME's dialog):
   there is no terminal, so the "no tty" skip and the Enter key do not apply. Skips that remain: no key file, remote
-  (`PAM_RHOST`), session locked. Challenge purpose `polkit`, command `-` (PAM does not tell the helper which polkit
+  (`PAM_RHOST`, or no local graphical session found as above), session locked. Challenge purpose `polkit`, command `-` (PAM does not tell the helper which polkit
   action is being authorised). No text is printed. Wait at most **10 s**; the phone's **Use password** answers the
   request with "cancelled" → the agent ends the long-poll at once → exit 1 → GNOME shows the password field.
 - Any error, timeout or missing agent → exit 1, so `sudo` / the dialog just asks for the password. The password therefore always
@@ -159,8 +173,10 @@ New file `UnlockService.cs`, opt-in setting `unlock.enabled` (off by default) in
    password, then with the phone's Wi-Fi off. Undo = restore the backup.
    (Howdy also sits in `/etc/pam.d/gdm-password`; this feature does not touch that file. Removing Howdy there or
    uninstalling it is a separate, optional step for the owner.)
-5. Same safety routine for `/etc/pam.d/polkit-1` (backup, root shell open, add the line at the top of the `auth`
-   lines). Test: `pkexec true` → dialog → finger; again → **Use password** → password works; lock 1Password, unlock it
+5. polkit: root shell open; `sudo cp /usr/lib/pam.d/polkit-1 /etc/pam.d/polkit-1` (there is no `/etc` copy on
+   Fedora, and an `/etc` file with only the new line would drop the password path), then add the line above
+   `auth include system-auth` in the new `/etc/pam.d/polkit-1`. Undo = `rm /etc/pam.d/polkit-1` (falls back to the
+   vendor file). Test: `pkexec true` → dialog → finger; again → **Use password** → password works; lock 1Password, unlock it
    with system authentication → finger; phone Wi-Fi off → password field at once.
 6. Turn off PhoneBox's self-update while running the fork (it would replace the build with upstream).
 
