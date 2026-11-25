@@ -1429,7 +1429,7 @@ let unlockSigning = false;
 let codeMissing = null;   // cached: does this phone lack a usable key? Refreshed on setup, wake and when enrolled changes
 let codeFor;               // the `enrolled` value the cache was read for
 let unlockMsgTimer = 0;
-let listenWanted = false; // touch to unlock: what the app was last told (listen on the sensor or not)
+let listenWanted = null;  // touch to unlock: what the app was last told; null until the first render, so a reloaded panel always tells it
 let listenStopped = false; // the app reported that Android stopped the sensor: the Unlock PC button is back
 
 export async function loadUnlock() {
@@ -1494,7 +1494,7 @@ export function renderUnlock() {
   const setup = !s.enrolled || codeMissing === true;
   // touch to unlock: the app listens on the sensor while the PC is locked and no request card needs the sensor
   setListen(showScreen && !r && typeof bridge.unlockListen === 'function');
-  const touch = listenWanted && !listenStopped;
+  const touch = listenWanted === true && !listenStopped;
   $('ukTouch').hidden = !touch;
   $('ukScreen').hidden = !showScreen || touch;
   $('ukSetup').hidden = !setup;

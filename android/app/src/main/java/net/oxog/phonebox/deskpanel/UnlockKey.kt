@@ -174,18 +174,20 @@ class UnlockKey(private val activity: Activity) : UnlockKeyRotation.Slots {
             fm()?.let { it.isHardwareDetected && it.hasEnrolledFingerprints() } == true
         } catch (e: Exception) { false }
 
-        override fun start(onTouch: (Signature) -> Unit, onMiss: () -> Unit, onError: () -> Unit): (() -> Unit)? {
+        override fun start(onTouch: (Signature) -> Unit, onMiss: () -> Unit, onError: (stop: Boolean) -> Unit): (() -> Unit)? {
             val m = fm() ?: return null
             val signature = signer() ?: return null
             val signal = CancellationSignal()
             val callback = object : FingerprintManager.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: FingerprintManager.AuthenticationResult) {
-                    result.cryptoObject?.signature?.let(onTouch) ?: onError()
+                    result.cryptoObject?.signature?.let(onTouch) ?: onError(false)
                 }
                 override fun onAuthenticationFailed() { miss(); onMiss() }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
                     Log.i(TAG, "touch unlock: sensor stopped ($errorCode)")
-                    onError()
+                    // cancelled by the system or the hardware busy for a moment: try again; anything else stops
+                    onError(errorCode != FingerprintManager.FINGERPRINT_ERROR_CANCELED &&
+                        errorCode != FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE)
                 }
             }
             return try {

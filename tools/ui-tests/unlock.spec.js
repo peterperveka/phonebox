@@ -135,7 +135,7 @@ const reload = (page, change) => page.evaluate(async (change) => {
 
 test('while the PC is locked the app is asked to listen and the touch hint shows', async ({ page }) => {
   await open(page, { state: locked(), listen: true });
-  expect(await page.evaluate(() => window.__listens)).toEqual([true]);
+  expect(await page.evaluate(() => window.__listens)).toEqual([false, true]);
   await page.evaluate(() => window.pbUnlockListen('listening'));
   await expect(page.locator('#ukTouch')).toHaveText('Touch the sensor to unlock the PC');
   await expect(page.locator('#ukTouch')).toBeVisible();
@@ -152,24 +152,29 @@ test('stopped brings the Unlock PC button back', async ({ page }) => {
 test('unlocking the PC stops listening', async ({ page }) => {
   await open(page, { state: locked(), listen: true });
   await reload(page, { locked: false, screen: null });
-  expect(await page.evaluate(() => window.__listens)).toEqual([true, false]);
+  expect(await page.evaluate(() => window.__listens)).toEqual([false, true, false]);
 });
 
 test('a sudo card stops listening', async ({ page }) => {
   await open(page, { state: locked(), listen: true });
   await reload(page, { request: { id: 'r', challenge: 'c' } });
-  expect(await page.evaluate(() => window.__listens)).toEqual([true, false]);
+  expect(await page.evaluate(() => window.__listens)).toEqual([false, true, false]);
 });
 
 test('failed shows Not unlocked and keeps listening', async ({ page }) => {
   await open(page, { state: locked(), listen: true });
   await page.evaluate(() => { window.pbUnlockListen('listening'); window.pbUnlockListen('failed'); });
   await expect(page.locator('#ukMsg')).toHaveText('Not unlocked');
-  expect(await page.evaluate(() => window.__listens)).toEqual([true]);
+  expect(await page.evaluate(() => window.__listens)).toEqual([false, true]);
 });
 
 test('an app without unlockListen keeps the Unlock PC button', async ({ page }) => {
   await open(page, { state: locked() });
   await expect(page.locator('#ukScreen')).toBeVisible();
   await expect(page.locator('#ukTouch')).toBeHidden();
+});
+
+test('a fresh panel tells the app not to listen while the PC is unlocked', async ({ page }) => {
+  await open(page, { state: { enabled: true, enrolled: true, locked: false, screen: null, request: null }, listen: true });
+  expect(await page.evaluate(() => window.__listens)).toEqual([false]);
 });

@@ -9,6 +9,10 @@ package net.oxog.phonebox.deskpanel
  * (unlocked), false (refused or unreachable) or null (nothing to unlock any more). Results go to [report]:
  * "listening", "unlocked", "failed", "stopped". All public calls and sensor callbacks must arrive on the main thread;
  * [main] brings the [unlock] result back there.
+ *
+ * A repeated want(true) re-reports the current state, so a panel that reloaded learns it again. A sensor error is
+ * either final (lockout, no fingerprints: stopped) or transient (cancelled by the system, hardware busy): a transient
+ * one retries through [later], and the third in a row without a touch stops.
  */
 class UnlockListener<S>(
     private val sensor: Sensor<S>,
@@ -16,11 +20,12 @@ class UnlockListener<S>(
     private val report: (String) -> Unit,
     private val background: (() -> Unit) -> Unit,
     private val main: (() -> Unit) -> Unit,
+    private val later: (() -> Unit) -> Unit,
 ) {
     interface Sensor<S> {
         fun available(): Boolean
         /** Starts one session; returns a cancel function, or null if it could not start. */
-        fun start(onTouch: (S) -> Unit, onMiss: () -> Unit, onError: () -> Unit): (() -> Unit)?
+        fun start(onTouch: (S) -> Unit, onMiss: () -> Unit, onError: (stop: Boolean) -> Unit): (() -> Unit)?
     }
 
     private var wanted = false
@@ -29,9 +34,13 @@ class UnlockListener<S>(
     private var busy = false
     private var cancel: (() -> Unit)? = null
     private var session = 0
+    private var transient = 0
 
     fun want(on: Boolean) {
-        if (!on) stopped = false
+        if (on && wanted) {
+            if (stopped) report("stopped") else if (cancel != null) report("listening")
+        }
+        if (!on) { stopped = false; transient = 0 }
         wanted = on
         reconsider()
     }
@@ -53,14 +62,21 @@ class UnlockListener<S>(
         val c = sensor.start(
             onTouch = { s -> if (id == session && cancel != null) touched(s) },
             onMiss = {},
-            onError = { if (id == session && cancel != null) { cancel = null; stop() } },
+            onError = { final -> if (id == session && cancel != null) errored(final) },
         ) ?: return stop()
         cancel = c
         report("listening")
     }
 
+    private fun errored(final: Boolean) {
+        cancel = null
+        if (final || ++transient >= MAX_TRANSIENT) return stop()
+        later { reconsider() }
+    }
+
     private fun touched(s: S) {
         cancel = null
+        transient = 0
         busy = true
         background {
             val r = try { unlock(s) } catch (_: Exception) { false }
@@ -79,5 +95,9 @@ class UnlockListener<S>(
     private fun stop() {
         stopped = true
         report("stopped")
+    }
+
+    private companion object {
+        const val MAX_TRANSIENT = 3
     }
 }
