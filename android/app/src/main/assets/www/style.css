@@ -1548,6 +1548,13 @@ html.beat-4 .w-onair.on .oa-sign { box-shadow: 0 0 34px rgba(239, 68, 68, .9); }
 .ap-btn.deny { background: rgba(239, 68, 68, .16); color: #fca5a5; border: 1px solid rgba(239, 68, 68, .4); }
 .ap-btn.always { background: rgba(34, 197, 94, .13); color: #86efac; border: 1px solid rgba(34, 197, 94, .4); }
 .ap-btn.allow { background: #22c55e; color: #052e14; }
+#unlockCard { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 91; background: rgba(4, 5, 8, .88); display: flex; align-items: center; justify-content: center; padding: 14px var(--pad-r) 14px var(--pad-l); }
+#unlockCard .uk-card { height: auto; max-height: 100%; }
+#unlockCard .ap-detail { flex: 0 1 auto; white-space: pre-wrap; }
+#unlockCard .ap-btn { flex: 1; min-width: 0; }
+#unlockBar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 89; max-width: 92%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+#ukMsg { padding: 8px 12px; border-radius: 12px; background: #10131a; border: 1px solid var(--line); font-size: 13px; text-align: center; }
+#unlockBar .ap-btn { min-width: 0; }
 .ap-btn:active { transform: scale(.96); }
 .ap-btn:disabled { opacity: .4; }
 /* OpenCode's third button (Allow always): the two greens and the deny share the row, so the countdown hides and
