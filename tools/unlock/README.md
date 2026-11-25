@@ -8,6 +8,8 @@ do kópie; vrátenie = `rm /etc/pam.d/polkit-1`. Testuj v *novom* termináli a k
 (krok 8). Heslo funguje vždy ako záloha. Po každom novom nastavení na telefóne spusti znova
 `sudo /usr/local/lib/phonebox/phonebox-unlock enroll`. Samoaktualizáciu PhoneBoxu vypni, inak ti prepíše tento build.
 Kábel na USB musí byť dátový (terajší len nabíja).
+Zamknuté PC odomkneš priložením prsta na snímač telefónu, bez okna na telefóne (len pre obrazovku; sudo a polkit
+ostávajú s oknom).
 
 Commands are for this machine (Fedora, GNOME, user in `$USER`). Run everything from the repository root of this branch.
 
@@ -163,8 +165,14 @@ The helper fails closed and silently, so a blocked helper looks like "password o
 Either way the password keeps working; sudo is not affected.
 ### Screen unlock (GNOME lock screen)
 
-Lock with **Super+L**. Within about 2 s the phone shows **Unlock PC**; tap it and use the fingerprint: the screen
-unlocks. Cancel the fingerprint instead: the screen stays locked and your password still works.
+Lock with **Super+L**. Within about 2 s the phone shows "Touch the sensor to unlock the PC". Touch the fingerprint
+sensor (on a side sensor, touch it, do not press it): the screen unlocks, with no dialog on the phone. A wrong finger
+gives a short buzz and the phone keeps listening. The phone listens only while the PC is locked, the panel is in front
+and the phone screen is on; a sudo or polkit card pauses it (those keep the fingerprint dialog, which shows what you
+approve).
+
+After too many wrong fingers Android stops the sensor for a while; the phone then shows the **Unlock PC** button again:
+tap it and use the fingerprint in the dialog. Your password always works too.
 
 ## 8. Undo
 
