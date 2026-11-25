@@ -16,25 +16,28 @@ public sealed class UnlockServiceTests : IDisposable
     {
         public bool Locked;
         public int UnlockCalls;
-        public string? GraphicalSessionId() => "c1";
+        public int Checks;
+        public string? GraphicalSessionId() { Checks++; return "c1"; }
         public bool IsLocked(string id) => Locked;
         public bool Unlock(string id) { UnlockCalls++; return true; }
     }
 
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"phonebox-unlock-{Guid.NewGuid():N}.json");
+    private readonly string _keyFile = Path.Combine(Path.GetTempPath(), $"phonebox-unlock-{Guid.NewGuid():N}.pub");
     private readonly ECDsa _key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
     private readonly Clock _clock = new();
     private readonly FakeSession _session = new() { Locked = true };
 
-    public void Dispose() { _key.Dispose(); try { File.Delete(_path); File.Delete(_path + ".bak"); } catch { } }
+    public void Dispose() { _key.Dispose(); try { File.Delete(_path); File.Delete(_path + ".bak"); File.Delete(_keyFile); } catch { } }
 
-    private UnlockService Make(bool enabled = true, bool enrolled = true, bool locked = true)
+    private UnlockService Make(bool enabled = true, bool enrolled = true, bool locked = true, bool supportedOs = true,
+        bool phone = true, ECDsa? configKey = null)
     {
-        var pk = enrolled ? $"\"{Convert.ToBase64String(_key.ExportSubjectPublicKeyInfo())}\"" : "null";
+        var pk = enrolled ? $"\"{Convert.ToBase64String((configKey ?? _key).ExportSubjectPublicKeyInfo())}\"" : "null";
         File.WriteAllText(_path, "{\"unlock\":{\"enabled\":" + (enabled ? "true" : "false") + ",\"publicKey\":" + pk + "}}");
         _session.Locked = locked;
         var svc = new UnlockService(new ConfigStore(_path), _session, new PushStore(NullLogger<PushStore>.Instance, null),
-            NullLogger<UnlockService>.Instance, _clock);
+            NullLogger<UnlockService>.Instance, _clock, () => supportedOs, () => phone, _keyFile);
         svc.Refresh();
         return svc;
     }
@@ -119,5 +122,79 @@ public sealed class UnlockServiceTests : IDisposable
         svc.Refresh();
         Assert.False(svc.UnlockScreen(c, Sign(c)));
         Assert.Equal(0, _session.UnlockCalls);
+    }
+
+    [Fact]
+    public void UnsupportedOsStaysUnlockedAndInactive()
+    {
+        var svc = Make(supportedOs: false);
+        Assert.False(svc.Locked);
+        Assert.Null(svc.ScreenChallenge());
+        Assert.Equal(0, _session.Checks);
+    }
+
+    [Fact]
+    public void NoLockCheckWhilePhoneIsAway()
+    {
+        var svc = Make(phone: false);
+        Assert.False(svc.Locked);
+        Assert.Null(svc.ScreenChallenge());
+        Assert.Equal(0, _session.Checks);
+    }
+
+    [Fact]
+    public void LockReturnsOnTheTickAfterThePhoneComesBack()
+    {
+        var phone = false;
+        File.WriteAllText(_path, "{\"unlock\":{\"enabled\":true,\"publicKey\":\"" + Convert.ToBase64String(_key.ExportSubjectPublicKeyInfo()) + "\"}}");
+        var svc = new UnlockService(new ConfigStore(_path), _session, new PushStore(NullLogger<PushStore>.Instance, null),
+            NullLogger<UnlockService>.Instance, _clock, () => true, () => phone, _keyFile);
+        svc.Refresh();
+        Assert.False(svc.Locked);
+        phone = true;
+        svc.Refresh();
+        Assert.True(svc.Locked);
+        phone = false;
+        svc.Refresh();
+        Assert.False(svc.Locked);
+    }
+
+    [Fact]
+    public void RootKeyFileWinsOverConfigKey()
+    {
+        using var other = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        File.WriteAllText(_keyFile, Convert.ToBase64String(_key.ExportSubjectPublicKeyInfo()) + "\n");
+        var svc = Make(configKey: other);
+        var c = svc.ScreenChallenge()!;
+        var byOther = Convert.ToBase64String(other.SignData(Encoding.UTF8.GetBytes(c), HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
+        Assert.False(svc.UnlockScreen(c, byOther));
+        c = svc.ScreenChallenge()!;
+        Assert.True(svc.UnlockScreen(c, Sign(c)));
+    }
+
+    [Fact]
+    public void ConfigKeyUsedWithoutRootKeyFile()
+    {
+        Assert.False(File.Exists(_keyFile));
+        var svc = Make();
+        var c = svc.ScreenChallenge()!;
+        Assert.True(svc.UnlockScreen(c, Sign(c)));
+    }
+
+    [Fact]
+    public void InvalidRootKeyFileRefusesWithoutFallback()
+    {
+        File.WriteAllText(_keyFile, "not a key\n");
+        var svc = Make();
+        var c = svc.ScreenChallenge()!;
+        Assert.False(svc.UnlockScreen(c, Sign(c)));
+        Assert.Equal(0, _session.UnlockCalls);
+    }
+
+    [Fact]
+    public void EnrollOnlyWhileEnabled()
+    {
+        Assert.False(UnlockService.CanEnroll(new UnlockConfig { Enabled = false }));
+        Assert.True(UnlockService.CanEnroll(new UnlockConfig { Enabled = true }));
     }
 }

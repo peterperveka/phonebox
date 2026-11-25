@@ -1038,6 +1038,7 @@ app.MapGet("/api/unlock/state", (ConfigStore cfg, UnlockService unlock, UnlockSt
 });
 app.MapPost("/api/unlock/enroll", async (HttpRequest req, ConfigStore cfg, ILogger<Program> log) =>
 {
+    if (!UnlockService.CanEnroll(cfg.Get().Unlock)) return Results.StatusCode(StatusCodes.Status403Forbidden);
     var body = await ReadUnlockBody<UnlockEnrollBody>(req);
     if (body?.PublicKey is not { } key || UnlockChallenge.CheckCode(key) is not { } code) return Results.BadRequest(new { error = "invalid public key" });
     string? err;
