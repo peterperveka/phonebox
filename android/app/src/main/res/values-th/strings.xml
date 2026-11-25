@@ -48,4 +48,6 @@
     <string name="bridge_last_off">การแจ้งเตือนล่าสุด: สวิตช์การแจ้งเตือนของ Mac ปิดอยู่</string>
     <string name="bridge_last_failed">การแจ้งเตือนล่าสุดส่งไปไม่ถึง Mac ระบบจะเก็บไว้สองนาที</string>
     <string name="bridge_access_idle">อนุญาตการเข้าถึงการแจ้งเตือนแล้ว แต่ Android ยังไม่ได้เริ่มตัวรับฟัง เปิดหน้าจอนี้อีกครั้ง หรือตรวจสอบการตั้งค่าแบตเตอรี่ของ PhoneBox</string>
+    <string name="sleep_service_label">PhoneBox: พักเครื่องพร้อมพีซี</string>
+    <string name="sleep_service_description">ปิดหน้าจอโทรศัพท์เมื่อพีซีล็อก PhoneBox ไม่อ่านสิ่งใดบนหน้าจอ</string>
 </resources>

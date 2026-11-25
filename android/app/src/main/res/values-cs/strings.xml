@@ -48,4 +48,6 @@
     <string name="bridge_last_off">Poslední oznámení: přepínač oznámení v Macu je vypnutý</string>
     <string name="bridge_last_failed">Poslední oznámení se do Macu nedostalo; uchovává se dvě minuty</string>
     <string name="bridge_access_idle">Přístup k oznámením je povolen, ale Android ještě nespustil naslouchání. Otevřete tuto obrazovku znovu nebo zkontrolujte nastavení baterie PhoneBoxu.</string>
+    <string name="sleep_service_label">PhoneBox: uspat s počítačem</string>
+    <string name="sleep_service_description">Vypne obrazovku telefonu, když se počítač zamkne. PhoneBox na obrazovce nic nečte.</string>
 </resources>

@@ -48,4 +48,6 @@
     <string name="bridge_last_off">마지막 알림: Mac의 알림 스위치가 꺼져 있습니다</string>
     <string name="bridge_last_failed">마지막 알림이 Mac에 도착하지 못했습니다. 2분 동안 보관됩니다</string>
     <string name="bridge_access_idle">알림 접근은 허용되었지만 Android가 아직 리스너를 시작하지 않았습니다. 이 화면을 다시 열거나 PhoneBox의 배터리 설정을 확인하세요.</string>
+    <string name="sleep_service_label">PhoneBox: PC와 함께 절전</string>
+    <string name="sleep_service_description">PC가 잠기면 휴대폰 화면을 끕니다. PhoneBox는 화면의 내용을 읽지 않습니다.</string>
 </resources>

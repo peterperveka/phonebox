@@ -48,4 +48,6 @@
     <string name="bridge_last_off">Laatste melding: de meldingsschakelaar van de Mac staat uit</string>
     <string name="bridge_last_failed">De laatste melding kon de Mac niet bereiken; hij wordt twee minuten bewaard</string>
     <string name="bridge_access_idle">Toegang tot meldingen is toegestaan, maar Android heeft de listener nog niet gestart. Open dit scherm opnieuw of controleer de batterij-instelling van PhoneBox.</string>
+    <string name="sleep_service_label">PhoneBox: slapen met de pc</string>
+    <string name="sleep_service_description">Zet het scherm van de telefoon uit wanneer de pc vergrendelt. PhoneBox leest niets op het scherm.</string>
 </resources>

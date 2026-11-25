@@ -63,7 +63,8 @@ export const $ = (id) => document.getElementById(id);
 // The native bridge (window.Android) is in every frame, sandboxed widgets included, so each call carries a key that only
 // the panel's own frames receive (MainActivity.bridgeKey). This wrapper adds it.
 const BRIDGE = ['battery', 'buzz', 'haptic', 'is24Hour', 'pcs', 'selectPc', 'forgetPc', 'setBrightness', 'setHomeScreen', 'setOrientation',
-  'setPinned', 'setVolumeKeys', 'setStandby', 'setLanguage', 'transport', 'sensors', 'version', 'canListen', 'listen', 'stopListening', 'cancelListening', 'trackpad', 'canWake', 'wakePc', 'openBridge'];
+  'setPinned', 'setVolumeKeys', 'setStandby', 'setLanguage', 'transport', 'sensors', 'version', 'canListen', 'listen', 'stopListening', 'cancelListening', 'trackpad', 'canWake', 'wakePc', 'openBridge',
+  'unlockSupported', 'unlockSetup', 'unlockCode', 'unlockPrompt', 'unlockSign', 'unlockListen', 'canSleep', 'sleepPhone', 'openAccessibilitySettings'];
 export const bridge = typeof Android === 'undefined' ? null : Object.fromEntries(BRIDGE.filter((m) => typeof Android[m] === 'function')
   .map((m) => [m, (...args) => Android[m](window.__phoneboxKey || '', ...args)]));
 // Live preview inside the agent's layout editor: the layout comes from the editor (unsaved), not from the agent.
@@ -157,7 +158,7 @@ export async function safeFetch(url, opts = {}) {
   }
 }
 
-export async function api(path, method = 'GET', timeout = 2500) {
+export async function api(path, method = 'GET', timeout = 2500, body) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeout);
   // The deadline rejects the caller itself instead of only aborting the request. Aborting is not enough: a body
@@ -166,7 +167,7 @@ export async function api(path, method = 'GET', timeout = 2500) {
   const deadline = new Promise((_, fail) => setTimeout(() => fail(new Error('timeout')), timeout));
   try {
     const work = (async () => {
-      const r = await fetch(API + path, { method, signal: ctl.signal, cache: 'no-store', headers: PANEL_HEADERS });
+      const r = await fetch(API + path, { method, signal: ctl.signal, cache: 'no-store', headers: body === undefined ? PANEL_HEADERS : { ...PANEL_HEADERS, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
       if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
       const ct = r.headers.get('content-type') || '';
       // Awaited on purpose: the timer is cleared in finally, so returning the promise unawaited let a response that
@@ -1415,7 +1416,171 @@ setInterval(tickApproval, 1000);
 // while it was down is never replayed. An approval lost that way leaves the command waiting in the dark with nothing
 // on screen, so ask for the list outright as well instead of relying on the event alone. Only while the panel is on
 // screen: the answer is needed when someone is looking, and a phone in a pocket should not poll all night.
-setInterval(() => { if (!PREVIEW && !idle()) loadApprovals(); }, 5000);
+setInterval(() => { if (!PREVIEW && !idle()) { loadApprovals(); loadUnlock(); } }, 5000);
+
+// ---------------------------------------------------------------- fingerprint unlock (phone answers the PC's sudo/polkit/lock screen)
+// Invisible unless the app supports it AND the agent has the feature switched on. The card text comes only from the
+// app (unlockPrompt), never from the agent; the agent's events only say "look again".
+export let unlockState = null;
+let unlockBusy = false;
+let unlockShown = null;     // request id the card is for
+let unlockPromptText = null; // {title, detail} for that id, or null when the app gave none
+let unlockSigning = false;
+let codeMissing = null;   // cached: does this phone lack a usable key? Refreshed on setup, wake and when enrolled changes
+let codeFor;               // the `enrolled` value the cache was read for
+let unlockMsgTimer = 0;
+let listenWanted = null;  // touch to unlock: what the app was last told; null until the first render, so a reloaded panel always tells it
+let lastLocked = null;     // follow the computer lock: the PC's lock as last seen (null until the first state)
+let listenStopped = false; // the app reported that Android stopped the sensor: the Unlock PC button is back
+
+export async function loadUnlock() {
+  if (PREVIEW || unlockBusy || !bridge || typeof bridge.unlockSupported !== 'function') return;
+  unlockBusy = true;
+  try {
+    let supported = false;
+    try { supported = !!bridge.unlockSupported(); } catch (_) {}
+    if (!supported) { unlockState = null; }
+    else {
+      try { unlockState = await api('/unlock/state', 'GET', 8000); followLock(); }
+      catch (e) {
+        // an agent without the feature answers 404: nothing to show. Any other failure keeps what is on screen.
+        if (e && e.status === 404) unlockState = null; else return;
+      }
+    }
+  } finally { unlockBusy = false; }
+  renderUnlock();
+}
+
+function unlockMessage(text, ms) {
+  clearTimeout(unlockMsgTimer);
+  $('ukMsg').textContent = text || '';
+  if (text) unlockMsgTimer = setTimeout(() => { $('ukMsg').textContent = ''; renderUnlock(); }, ms);
+  renderUnlock();
+}
+
+function refreshUnlockCode(enrolled = codeFor) {
+  codeFor = enrolled;
+  try { codeMissing = bridge.unlockCode() === ''; } catch (_) { codeMissing = false; }
+}
+
+export function renderUnlock() {
+  const s = unlockState && unlockState.enabled ? unlockState : null;
+  const card = $('unlockCard'), bar = $('unlockBar');
+  if (!s) { card.hidden = bar.hidden = true; unlockShown = null; unlockPromptText = null; setListen(false); return; }
+  // the phone card for a pending request
+  const r = s.request;
+  if (!r) { unlockShown = null; unlockPromptText = null; }
+  else if (unlockShown !== r.id) {
+    unlockShown = r.id;
+    unlockPromptText = null;
+    try {
+      const raw = bridge.unlockPrompt(r.challenge);
+      const p = raw ? JSON.parse(raw) : null;
+      if (p && typeof p.title === 'string' && p.title) unlockPromptText = { title: p.title, detail: typeof p.detail === 'string' ? p.detail : '' };
+    } catch (_) {}
+    if (unlockPromptText) {
+      lastTouch = Date.now();
+      undim();
+      if (nightOn) { wakeUntil = Date.now() + 60_000; setNight(false); }
+      buzz('0,120,80,120,80,240');
+      $('ukFp').disabled = $('ukPw').disabled = false;
+      $('ukTitle').textContent = unlockPromptText.title;
+      $('ukDetail').textContent = unlockPromptText.detail;
+    }
+  }
+  card.hidden = !(r && unlockPromptText);
+  // the bar: Unlock PC while the screen is locked, and the setup button until this phone is enrolled
+  const showScreen = !!(s.locked && s.screen);
+  if (codeFor !== s.enrolled) refreshUnlockCode(s.enrolled);
+  const setup = !s.enrolled || codeMissing === true;
+  // touch to unlock: the app listens on the sensor while the PC is locked and no request card needs the sensor
+  setListen(showScreen && !r && typeof bridge.unlockListen === 'function');
+  const touch = listenWanted === true && !listenStopped;
+  $('ukTouch').hidden = !touch;
+  $('ukScreen').hidden = !showScreen || touch;
+  $('ukSetup').hidden = !setup;
+  $('ukMsg').hidden = !$('ukMsg').textContent;
+  // follow the computer lock needs the accessibility service: offer it until it is on
+  let offerSleep = false;
+  if (cfg.display?.followComputerLock && typeof bridge.canSleep === 'function') {
+    try { offerSleep = !bridge.canSleep(); } catch (_) {}
+  }
+  $('ukSleep').hidden = $('ukSleepOn').hidden = !offerSleep;
+  bar.hidden = !(showScreen || setup || $('ukMsg').textContent || offerSleep);
+}
+
+$('ukFp').addEventListener('click', () => {
+  const r = unlockState && unlockState.request;
+  if (!r || unlockSigning) return;
+  haptic();
+  unlockSigning = true;
+  $('ukFp').disabled = $('ukPw').disabled = true;
+  try { bridge.unlockSign(r.id, r.challenge, 'request'); } catch (_) { window.pbUnlockDone(r.id, false); }
+});
+$('ukPw').addEventListener('click', async () => {
+  const r = unlockState && unlockState.request;
+  if (!r) return;
+  haptic();
+  $('ukFp').disabled = $('ukPw').disabled = true;
+  try { await api('/unlock/answer', 'POST', 4000, { id: r.id, signature: null }); } catch (_) {}
+  loadUnlock();
+});
+$('ukScreen').addEventListener('click', () => {
+  const s = unlockState;
+  if (!s || !s.screen || unlockSigning) return;
+  haptic();
+  unlockSigning = true;
+  $('ukScreen').disabled = true;
+  try { bridge.unlockSign('screen', s.screen, 'screen'); } catch (_) { window.pbUnlockDone('screen', false); }
+});
+$('ukSetup').addEventListener('click', () => {
+  haptic();
+  let code = '';
+  try { code = bridge.unlockSetup() || ''; } catch (_) {}
+  refreshUnlockCode();
+  // the code is shown for 30 s so it can be compared with the one the PC prints
+  unlockMessage(code ? `${code} · ${t('unlock.compare')}` : t('unlock.failed'), code ? 30000 : 4000);
+});
+// Follow the computer lock: the PC just locked (an edge, not a state), so the phone goes dark the way the power button
+// does it, through the app's accessibility service. Once per lock: a phone woken while the PC stays locked stays awake,
+// and a panel that starts on a PC that is already locked does not put the phone to sleep.
+function followLock() {
+  const now = !!(unlockState && unlockState.enabled && unlockState.locked);
+  if (!appPaused && lastLocked === false && now && cfg.display?.followComputerLock && typeof bridge.sleepPhone === 'function') {
+    try { bridge.sleepPhone(); } catch (_) {}
+  }
+  lastLocked = now;
+}
+
+function setListen(on) {
+  if (on === listenWanted) return;
+  listenWanted = on;
+  listenStopped = false;
+  try { bridge.unlockListen(on); } catch (_) {}
+}
+
+$('ukSleepOn').addEventListener('click', () => {
+  haptic();
+  try { bridge.openAccessibilitySettings(); } catch (_) {}
+});
+
+// the app reports touch-to-unlock: "listening", "unlocked", "failed" (the PC refused; it listens on), "stopped"
+window.pbUnlockListen = (state) => {
+  if (state === 'stopped') { listenStopped = true; renderUnlock(); }
+  else if (state === 'listening') { listenStopped = false; renderUnlock(); }
+  else if (state === 'failed') unlockMessage(t('unlock.failed'), 4000);
+  else if (state === 'unlocked') loadUnlock();
+};
+
+// the app reports the end of every unlockSign. On failure the app has already cancelled a phone request itself, so the
+// next fetch drops the card; there is no retry here.
+window.pbUnlockDone = (id, ok) => {
+  unlockSigning = false;
+  $('ukScreen').disabled = false;
+  $('ukFp').disabled = $('ukPw').disabled = false;
+  if (!ok) unlockMessage(t('unlock.failed'), 4000);
+  loadUnlock();
+};
 
 export async function decide(decision, value, label) {
   const a = approvals[0];
@@ -1473,6 +1638,7 @@ $('apCustomText').addEventListener('keydown', (e) => { if (e.key === 'Enter') { 
 export function handleEvent(e) {
   if (PREVIEW && (e.kind === 'goto' || e.kind === 'back' || e.kind === 'reload')) return; // the editor picks the page
   if (e.kind === 'approval' || e.kind === 'approval-done') loadApprovals();
+  else if (e.kind === 'unlock') loadUnlock(); // payloads vary and can arrive out of order: never act on them, re-fetch
   else if (e.kind === 'notify' && e.data) handleNotify(e.data);
   else if (e.kind === 'goto' && e.data) requestPage(e.data);
   else if (e.kind === 'back' && e.data) requestBack(e.data.rule);
@@ -2693,7 +2859,7 @@ export function setOnline(on) {
   document.body.classList.toggle('offline', !on);
   if (on) { wakeAt = 0; clearInterval(wakeTicker); wakeTicker = 0; }
   wakeRender();
-  if (on && online !== true) { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadApprovals(); loadCalendar(); }
+  if (on && online !== true) { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadApprovals(); loadUnlock(); loadCalendar(); }
   const changed = online !== on;
   if (!on && changed) unreachableSince = unreachableSince || Date.now();
   if (on && changed) unreachableSince = 0;
@@ -2777,13 +2943,16 @@ export const idle = () => appPaused || document.hidden;
 window.onAppPause = (paused) => {
   const was = idle();
   appPaused = !!paused;
+  // a lock edge only counts while the panel is in front: a PC that locked while the phone was dark is no reason to put
+  // it back to sleep the moment the user wakes it (that wake is the one-touch unlock)
+  if (appPaused) lastLocked = null;
   if (was && !idle()) wokeUp();
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !appPaused) wokeUp(); });
 // what the paused panel skipped is fetched at once, not at the next interval
 function wokeUp() {
   if (!online) return;
-  loadConfig(); loadPush(); loadApprovals();
+  loadConfig(); loadPush(); loadApprovals(); if (unlockState) refreshUnlockCode(); loadUnlock();
   watchMedia(true);
   if (anyNeeds('quotas')) loadQuotas();
   if (anyNeeds('calendar')) loadCalendar();

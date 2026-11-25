@@ -48,4 +48,6 @@
     <string name="bridge_last_off">Última notificação: o interruptor de notificações do Mac está desativado</string>
     <string name="bridge_last_failed">A última notificação não chegou ao Mac; é guardada durante dois minutos</string>
     <string name="bridge_access_idle">O acesso às notificações está permitido, mas o Android ainda não iniciou o recetor. Abra este ecrã novamente ou verifique a definição de bateria do PhoneBox.</string>
+    <string name="sleep_service_label">PhoneBox: suspender com o PC</string>
+    <string name="sleep_service_description">Desliga o ecrã do telemóvel quando o PC bloqueia. O PhoneBox não lê nada no ecrã.</string>
 </resources>

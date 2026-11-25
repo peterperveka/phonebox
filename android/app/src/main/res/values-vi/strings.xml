@@ -50,4 +50,6 @@
     <string name="bridge_last_off">Thông báo gần nhất: công tắc thông báo của Mac đang tắt</string>
     <string name="bridge_last_failed">Thông báo gần nhất không tới được Mac; nó được giữ hai phút</string>
     <string name="bridge_access_idle">Đã cho phép truy cập thông báo, nhưng Android chưa khởi động bộ lắng nghe. Hãy mở lại màn hình này hoặc kiểm tra cài đặt pin của PhoneBox.</string>
+    <string name="sleep_service_label">PhoneBox: ngủ cùng máy tính</string>
+    <string name="sleep_service_description">Tắt màn hình điện thoại khi máy tính khóa. PhoneBox không đọc bất cứ thứ gì trên màn hình.</string>
 </resources>

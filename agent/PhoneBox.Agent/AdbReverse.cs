@@ -10,7 +10,7 @@ namespace PhoneBox.Agent;
 /// (unless Settings › Display › open on connect is off).
 /// </summary>
 public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log, AgentEndpoint? endpoint = null, UsbLink? usb = null,
-    IHostApplicationLifetime? lifetime = null) : BackgroundService
+    IHostApplicationLifetime? lifetime = null, ILoginSession? login = null) : BackgroundService
 {
     public const string PanelActivity = "net.oxog.phonebox.deskpanel/.MainActivity";
     private const string HomeAlias = "net.oxog.phonebox.deskpanel/.HomeAlias";
@@ -448,9 +448,21 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log, AgentEn
 
     private ScreenSynchronizer? _screenSync;
     private ScreenSynchronizer ScreenSync => LazyInitializer.EnsureInitialized(ref _screenSync,
-        () => new ScreenSynchronizer(MacSessionLock.IsLocked, ApplyScreenAsync));
+        () => new ScreenSynchronizer(() => ComputerLock.Read(login), ApplyScreenAsync));
 
     public Task<bool> SyncSessionAsync(CancellationToken ct, bool force = false) => ScreenSync.ReconcileAsync(_devices, ct, force);
+
+    /// <summary>
+    /// A phone that just connected, with "Follow the computer lock" on: put its screen in step with the lock. True when
+    /// that handled the phone. On Linux a lock that cannot be read (no graphical session) leaves the phone to the normal
+    /// open-on-connect path; macOS keeps its behaviour.
+    /// </summary>
+    private async Task<bool> FollowLockAsync(CancellationToken ct)
+    {
+        if (!cfg.Get().Display.FollowComputerLock || !ComputerLock.Supported) return false;
+        var available = await SyncSessionAsync(ct, force: true);
+        return available || OperatingSystem.IsMacOS();
+    }
     public Task ResetSessionAsync(CancellationToken ct) => ScreenSync.ResetAsync(ct);
 
     /// <summary>
@@ -532,12 +544,7 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log, AgentEn
 
         try
         {
-            if (cfg.Get().Display.FollowComputerLock &&
-                OperatingSystem.IsMacOS())
-            {
-                await SyncSessionAsync(ct, force: true);
-            }
-            else
+            if (!await FollowLockAsync(ct))
             {
                 await LightPanel(device, adb, why, ct);
             }
@@ -577,9 +584,13 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log, AgentEn
         if (locked) await Adb(adb, ["-s", device, "shell", "input", "keyevent", "KEYCODE_SLEEP"], ct);
         else
         {
-            await Adb(adb, ["-s", device, "shell", "input", "keyevent", "KEYCODE_WAKEUP"], ct);
+            // Some phones refuse injected keys over USB (Xiaomi without "USB debugging (Security settings)"); am start
+            // needs no key injection, so the panel still comes up.
+            try { await Adb(adb, ["-s", device, "shell", "input", "keyevent", "KEYCODE_WAKEUP"], ct); }
+            catch (IOException ex) { log.LogDebug(ex, "{Device}: wake key refused", device); }
             // A secure PIN/password keyguard still needs the user's unlock.
-            await Adb(adb, ["-s", device, "shell", "wm", "dismiss-keyguard"], ct);
+            try { await Adb(adb, ["-s", device, "shell", "wm", "dismiss-keyguard"], ct); }
+            catch (IOException ex) { log.LogDebug(ex, "{Device}: dismiss-keyguard refused", device); }
             await Adb(adb, ["-s", device, "shell", "am", "start", "-n", PanelActivity], ct);
         }
         log.LogInformation("{Device}: phone screen {State}", device, locked ? "asleep" : "awake");
@@ -839,10 +850,7 @@ public sealed class AdbReverse(ConfigStore cfg, ILogger<AdbReverse> log, AgentEn
                 continue;
             }
             // A newly plugged-in phone must not light up while the computer is locked.
-            if (cfg.Get().Display.FollowComputerLock && OperatingSystem.IsMacOS())
-            {
-                await SyncSessionAsync(ct, force: true);
-            }
+            if (await FollowLockAsync(ct)) { /* the lock decided: asleep while locked, the panel when unlocked */ }
             else if (cfg.Get().Display.OpenOnConnect)
             {
                 await LightPanel(d, adb, "adb reverse set up", ct);

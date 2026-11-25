@@ -48,4 +48,6 @@
     <string name="bridge_last_off">Son bildirim: Mac\'in bildirim anahtarı kapalı</string>
     <string name="bridge_last_failed">Son bildirim Mac\'e ulaşamadı; iki dakika saklanır</string>
     <string name="bridge_access_idle">Bildirim erişimine izin verildi, ancak Android dinleyiciyi henüz başlatmadı. Bu ekranı tekrar açın veya PhoneBox\'ın pil ayarını kontrol edin.</string>
+    <string name="sleep_service_label">PhoneBox: bilgisayarla birlikte uyu</string>
+    <string name="sleep_service_description">Bilgisayar kilitlendiğinde telefon ekranını kapatır. PhoneBox ekrandaki hiçbir şeyi okumaz.</string>
 </resources>

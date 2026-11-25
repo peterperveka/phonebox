@@ -48,4 +48,6 @@
     <string name="bridge_last_off">Последнее уведомление: переключатель уведомлений на Mac выключен</string>
     <string name="bridge_last_failed">Последнее уведомление не дошло до Mac; оно хранится две минуты</string>
     <string name="bridge_access_idle">Доступ к уведомлениям разрешён, но Android ещё не запустил слушатель. Откройте этот экран снова или проверьте настройки батареи PhoneBox.</string>
+    <string name="sleep_service_label">PhoneBox: сон вместе с ПК</string>
+    <string name="sleep_service_description">Выключает экран телефона, когда ПК блокируется. PhoneBox ничего не читает с экрана.</string>
 </resources>

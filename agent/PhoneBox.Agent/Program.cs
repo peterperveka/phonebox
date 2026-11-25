@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PhoneBox.Agent;
 
 var endpoint = AgentEndpoint.FromArgs(args);
@@ -115,6 +116,15 @@ if (OperatingSystem.IsMacOS())
 #endif
 builder.Services.AddSingleton<CommandRunner>();
 builder.Services.AddSingleton<ApprovalStore>();
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<UnlockStore>();
+#if WINDOWS
+builder.Services.AddSingleton<ILoginSession, NoLoginSession>();
+#else
+builder.Services.AddSingleton<ILoginSession, LoginSession>();
+#endif
+builder.Services.AddSingleton<UnlockService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<UnlockService>());
 builder.Services.AddSingleton<HomeAssistant>();
 builder.Services.AddSingleton<AppConsole>();
 builder.Services.AddSingleton<Dictation>();
@@ -254,7 +264,7 @@ app.Use((ctx, next) =>
 var timings = new RequestTimings();
 app.Use(async (ctx, next) =>
 {
-    if (!ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/api/stream") || ctx.Request.Path == "/api/bridge/stream") { await next(ctx); return; }
+    if (!ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/api/stream") || ctx.Request.Path == "/api/bridge/stream" || ctx.Request.Path == "/api/unlock/request") { await next(ctx); return; }
     var started = System.Diagnostics.Stopwatch.GetTimestamp();
     try { await next(ctx); }
     finally
@@ -1036,6 +1046,78 @@ app.MapGet("/api/approvals", (ApprovalStore a) => Results.Json(new { items = a.S
 app.MapPost("/api/approvals/{id}", (string id, string decision, string? value, ApprovalStore a) =>
     a.Decide(id, decision, value) ? Results.Ok() : Results.NotFound());
 
+// Phone fingerprint unlock (off by default). The phone uses state/enroll/answer/screen; the helper (127.0.0.1 only,
+// see Lan.AllowedOverLan) uses key/request.
+app.MapGet("/api/unlock/state", (ConfigStore cfg, UnlockService unlock, UnlockStore store) =>
+{
+    var u = cfg.Get().Unlock;
+    var enrolled = !string.IsNullOrEmpty(u.PublicKey);
+    if (!u.Enabled) return Results.Json(new { enabled = false, enrolled, locked = false, screen = (string?)null, request = (UnlockRequest?)null });
+    return Results.Json(new { enabled = true, enrolled, locked = unlock.Locked, lockedForMs = unlock.LockedForMs(), screen = unlock.ScreenChallenge(), request = store.Pending() });
+});
+app.MapPost("/api/unlock/enroll", async (HttpRequest req, ConfigStore cfg, ILogger<Program> log) =>
+{
+    if (!UnlockService.CanEnroll(cfg.Get().Unlock)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+    var body = await ReadUnlockBody<UnlockEnrollBody>(req);
+    if (body?.PublicKey is not { } key || UnlockChallenge.CheckCode(key) is not { } code) return Results.BadRequest(new { error = "invalid public key" });
+    string? err;
+    lock (IconCommit)
+    {
+        var version = cfg.Version;
+        var copy = JsonSerializer.Deserialize<AgentConfig>(JsonSerializer.Serialize(cfg.Get(), ConfigStore.WriteOpts), ConfigStore.WriteOpts)!;
+        copy.Unlock.PublicKey = key;
+        err = cfg.Save(JsonSerializer.Serialize(copy, ConfigStore.WriteOpts), version);
+    }
+    if (err == ConfigStore.Conflict) return Results.Json(new { error = err }, statusCode: StatusCodes.Status409Conflict);
+    if (err is not null) return Results.BadRequest(new { error = err });
+    log.LogInformation("Unlock: phone enrolled, check code {Code}", code);
+    return Results.Ok();
+});
+app.MapPost("/api/unlock/answer", async (HttpRequest req, UnlockStore store) =>
+{
+    var body = await ReadUnlockBody<UnlockAnswerBody>(req);
+    if (body?.Id is null) return Results.BadRequest(new { error = "id expected" });
+    return store.Answer(body.Id, body.Signature) ? Results.Ok() : Results.NotFound();
+});
+app.MapPost("/api/unlock/screen", async (HttpRequest req, UnlockService unlock) =>
+{
+    var body = await ReadUnlockBody<UnlockScreenBody>(req);
+    if (body?.Challenge is null || body.Signature is null) return Results.BadRequest(new { error = "challenge and signature expected" });
+    return unlock.UnlockScreen(body.Challenge, body.Signature) ? Results.Ok() : Results.StatusCode(StatusCodes.Status403Forbidden);
+});
+app.MapGet("/api/unlock/key", (ConfigStore cfg) =>
+    cfg.Get().Unlock.PublicKey is { Length: > 0 } key && UnlockChallenge.CheckCode(key) is { } code
+        ? Results.Json(new { publicKey = key, code }) : Results.NotFound());
+app.MapPost("/api/unlock/request", async (HttpContext ctx, ConfigStore cfg, UnlockStore store) =>
+{
+    var u = cfg.Get().Unlock;
+    if (!u.Enabled || string.IsNullOrEmpty(u.PublicKey) || !ApprovalStore.PhoneConnected) return Results.NoContent();
+    var body = await ReadUnlockBody<UnlockRequestBody>(ctx.Request);
+    if (body?.Challenge is not { } challenge || UnlockChallenge.Parse(challenge) is not { } parts || !UnlockChallenge.IsRequestPurpose(parts.Purpose))
+        return Results.BadRequest(new { error = "invalid challenge" });
+    var sig = await store.RequestAsync(challenge, TimeSpan.FromSeconds(20), ctx.RequestAborted);
+    return sig is null ? Results.NoContent() : Results.Json(new { signature = sig });
+});
+
+// Tiny JSON bodies only; null when malformed, oversized or empty.
+static async Task<T?> ReadUnlockBody<T>(HttpRequest req) where T : class
+{
+    if (req.ContentLength is > 4096) return null;
+    try
+    {
+        using var ms = new MemoryStream();
+        var buf = new byte[1024];
+        int n;
+        while ((n = await req.Body.ReadAsync(buf)) > 0)
+        {
+            ms.Write(buf, 0, n);
+            if (ms.Length > 4096) return null;
+        }
+        return JsonSerializer.Deserialize<T>(ms.ToArray(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    }
+    catch (JsonException) { return null; }
+}
+
 // Spectrum bars widget: each call keeps audio capture running for a few seconds and returns the latest bands
 // (the live stream also sends them as "spectrum" events; panels without the stream poll this instead).
 // Only band levels leave the agent, never audio; nothing is captured unless an enabled page has the widget.
@@ -1260,6 +1342,11 @@ static void AddMonitor<T>(IServiceCollection s) where T : class, IHostedService
     s.AddSingleton<T>();
     s.AddHostedService(sp => sp.GetRequiredService<T>());
 }
+
+internal sealed record UnlockEnrollBody(string? PublicKey);
+internal sealed record UnlockAnswerBody(string? Id, string? Signature);
+internal sealed record UnlockScreenBody(string? Challenge, string? Signature);
+internal sealed record UnlockRequestBody(string? Challenge);
 
 /// <summary>Body of POST /api/pair/claim.</summary>
 internal sealed record PairClaim(string? Code);

@@ -48,4 +48,6 @@
     <string name="bridge_last_off">Ostatnie powiadomienie: przełącznik powiadomień na Macu jest wyłączony</string>
     <string name="bridge_last_failed">Ostatnie powiadomienie nie dotarło na Maca; jest przechowywane przez dwie minuty</string>
     <string name="bridge_access_idle">Dostęp do powiadomień jest dozwolony, ale Android nie uruchomił jeszcze nasłuchu. Otwórz ten ekran ponownie lub sprawdź ustawienie baterii PhoneBox.</string>
+    <string name="sleep_service_label">PhoneBox: usypiaj razem z komputerem</string>
+    <string name="sleep_service_description">Wyłącza ekran telefonu, gdy komputer się zablokuje. PhoneBox nic nie odczytuje z ekranu.</string>
 </resources>

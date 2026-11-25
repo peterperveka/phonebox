@@ -48,4 +48,6 @@
     <string name="bridge_last_off">Letzte Benachrichtigung: Der Benachrichtigungs-Schalter des Macs ist aus</string>
     <string name="bridge_last_failed">Die letzte Benachrichtigung hat den Mac nicht erreicht; sie wird zwei Minuten aufbewahrt</string>
     <string name="bridge_access_idle">Der Zugriff auf Benachrichtigungen ist erlaubt, aber Android hat den Listener noch nicht gestartet. Öffne diesen Bildschirm erneut oder prüfe die Akku-Einstellung von PhoneBox.</string>
+    <string name="sleep_service_label">PhoneBox: mit dem PC schlafen</string>
+    <string name="sleep_service_description">Schaltet den Bildschirm des Telefons aus, wenn der PC gesperrt wird. PhoneBox liest nichts auf dem Bildschirm.</string>
 </resources>

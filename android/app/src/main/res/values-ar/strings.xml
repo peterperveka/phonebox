@@ -48,4 +48,6 @@
     <string name="bridge_last_off">آخر إشعار: مفتاح الإشعارات في Mac متوقف</string>
     <string name="bridge_last_failed">لم يصل آخر إشعار إلى Mac؛ يُحتفظ به لمدة دقيقتين</string>
     <string name="bridge_access_idle">الوصول إلى الإشعارات مسموح، لكن Android لم يبدأ المستمع بعد. افتح هذه الشاشة مرة أخرى أو تحقق من إعداد بطارية PhoneBox.</string>
+    <string name="sleep_service_label">PhoneBox: النوم مع الكمبيوتر</string>
+    <string name="sleep_service_description">يطفئ شاشة الهاتف عند قفل الكمبيوتر. لا يقرأ PhoneBox أي شيء على الشاشة.</string>
 </resources>

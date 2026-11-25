@@ -48,4 +48,6 @@
     <string name="bridge_last_off">आखिरी सूचना: Mac का सूचना स्विच बंद है</string>
     <string name="bridge_last_failed">आखिरी सूचना Mac तक नहीं पहुँची; उसे दो मिनट तक रखा जाता है</string>
     <string name="bridge_access_idle">सूचना एक्सेस की अनुमति है, लेकिन Android ने अभी लिस्नर शुरू नहीं किया है। यह स्क्रीन दोबारा खोलें या PhoneBox की बैटरी सेटिंग जाँचें।</string>
+    <string name="sleep_service_label">PhoneBox: पीसी के साथ स्लीप</string>
+    <string name="sleep_service_description">पीसी लॉक होने पर फ़ोन की स्क्रीन बंद कर देता है। PhoneBox स्क्रीन पर कुछ नहीं पढ़ता।</string>
 </resources>

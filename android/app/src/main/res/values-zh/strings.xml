@@ -48,4 +48,6 @@
     <string name="bridge_last_off">最近一条通知：Mac 的通知开关已关闭</string>
     <string name="bridge_last_failed">最近一条通知未能送达 Mac；它会保留两分钟</string>
     <string name="bridge_access_idle">已允许通知访问，但 Android 尚未启动监听服务。请再次打开此屏幕，或检查 PhoneBox 的电池设置。</string>
+    <string name="sleep_service_label">PhoneBox：随电脑休眠</string>
+    <string name="sleep_service_description">电脑锁定时关闭手机屏幕。PhoneBox 不读取屏幕上的任何内容。</string>
 </resources>

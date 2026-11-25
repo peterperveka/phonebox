@@ -72,3 +72,11 @@ test('the test button posts to the agent once the settings are saved, and asks t
   await expect(page.locator('#toast')).toContainText(/save/i);
   expect(await page.evaluate(() => window.__bridgeCalls)).toEqual(['POST']);
 });
+
+test('the follow-the-lock option shows on Linux and macOS, not on Windows', async ({ page }) => {
+  const hidden = /display:\s*none/;
+  await open(page, config({}), 'linux');
+  await expect(page.locator('#followComputerLockOption')).not.toHaveAttribute('style', hidden);
+  await open(page, config({}), 'windows');
+  await expect(page.locator('#followComputerLockOption')).toHaveAttribute('style', hidden);
+});

@@ -48,4 +48,6 @@
     <string name="bridge_last_off">Notifikasi terakhir: sakelar notifikasi Mac mati</string>
     <string name="bridge_last_failed">Notifikasi terakhir tidak sampai ke Mac; disimpan selama dua menit</string>
     <string name="bridge_access_idle">Akses notifikasi diizinkan, tetapi Android belum memulai pendengarnya. Buka layar ini lagi, atau periksa pengaturan baterai PhoneBox.</string>
+    <string name="sleep_service_label">PhoneBox: tidur bersama PC</string>
+    <string name="sleep_service_description">Mematikan layar ponsel saat PC terkunci. PhoneBox tidak membaca apa pun di layar.</string>
 </resources>

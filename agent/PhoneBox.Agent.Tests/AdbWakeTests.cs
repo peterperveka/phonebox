@@ -35,7 +35,7 @@ public sealed class AdbWakeTests : IDisposable
     /// A fake adb with <paramref name="devices"/> attached and the PhoneBox panel installed. Its "dumpsys window"
     /// answer is <paramref name="windowDump"/>, which is what decides whether the keyguard gets stepped over.
     /// </summary>
-    private string FakeAdb(string windowDump, string[]? devices = null)
+    private string FakeAdb(string windowDump, string[]? devices = null, bool refuseKeys = false)
     {
         devices ??= ["FAKE1"];
         // The captured dumps carry quotes, brackets and more than one line, so they are not pasted into the scripts:
@@ -62,6 +62,7 @@ public sealed class AdbWakeTests : IDisposable
             "echo \"$*\" >> \"$(dirname \"$0\")/calls.log\"",
             "if [ \"$1\" = devices ]; then printf 'List of devices attached\\n" + string.Concat(devices.Select(d => d + "\\tdevice\\n")) + "'; exit 0; fi",
             "if [ \"$4\" = getprop ]; then exit 0; fi",
+            refuseKeys ? "if [ \"$4\" = input ]; then echo 'java.lang.SecurityException: Injecting input events requires the caller to have the INJECT_EVENTS permission.' >&2; exit 255; fi" : "",
             "if [ \"$3\" = reverse ] && [ \"$4\" = --list ]; then exit 0; fi",
             "if [ \"$4\" = pm ]; then echo package:/data/app/base.apk; exit 0; fi",
             "if [ \"$4\" = dumpsys ] && [ \"$5\" = window ]; then cat '" + dump + "'; exit 0; fi",
@@ -340,5 +341,28 @@ public sealed class AdbWakeTests : IDisposable
         var calls = Calls();
         Assert.Contains("-s FAKE1 shell wm dismiss-keyguard", calls);
         Assert.DoesNotContain("-s FAKE1 shell dumpsys window", calls);
+    }
+
+    /// <summary>
+    /// A phone that refuses injected keys (Xiaomi without "USB debugging (Security settings)"): unlocking the computer
+    /// still brings the panel up, because am start needs no key injection.
+    /// </summary>
+    [Fact]
+    public async Task UnlockStillOpensThePanelWhenThePhoneRefusesKeys()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var fake = FakeAdb(NoKeyguardStateNamed, refuseKeys: true);
+        var cfgPath = Path.Combine(_dir, "config.json");
+        File.WriteAllText(cfgPath, JsonSerializer.Serialize(Settings(fake, wakeOnUnlock: false, openOnConnect: false, followComputerLock: false)));
+        var adb = new AdbReverse(new ConfigStore(cfgPath), NullLogger<AdbReverse>.Instance);
+        using var cts = new CancellationTokenSource();
+        await adb.StartAsync(cts.Token);
+        try
+        {
+            for (var round = 0; round < 120 && Calls().Count(c => c == "devices") < 2; round++) await Task.Delay(100);
+            await ApplyScreenAsync(adb, "FAKE1", locked: false);
+        }
+        finally { cts.Cancel(); try { await adb.StopAsync(CancellationToken.None); } catch { } }
+        Assert.Contains("-s FAKE1 shell am start -n net.oxog.phonebox.deskpanel/.MainActivity", Calls());
     }
 }

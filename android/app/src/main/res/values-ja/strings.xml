@@ -48,4 +48,6 @@
     <string name="bridge_last_off">直近の通知：Mac の通知スイッチがオフです</string>
     <string name="bridge_last_failed">直近の通知は Mac に届きませんでした。2 分間保持されます</string>
     <string name="bridge_access_idle">通知へのアクセスは許可されていますが、Android がまだリスナーを起動していません。この画面をもう一度開くか、PhoneBox のバッテリー設定を確認してください。</string>
+    <string name="sleep_service_label">PhoneBox: PCと一緒にスリープ</string>
+    <string name="sleep_service_description">PCがロックされたときにスマートフォンの画面をオフにします。PhoneBoxは画面の内容を読み取りません。</string>
 </resources>

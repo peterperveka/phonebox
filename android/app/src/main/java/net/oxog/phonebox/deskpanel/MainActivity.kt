@@ -25,6 +25,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.text.format.DateFormat
+import android.util.Base64
 import android.util.Log
 import android.view.Gravity
 import android.view.InputDevice
@@ -49,6 +50,7 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import org.json.JSONArray
+import androidx.annotation.RequiresApi
 import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -80,7 +82,31 @@ class MainActivity : Activity(), SensorEventListener {
     private lateinit var link: AgentLink
     private lateinit var stream: AgentStream
     @Volatile private var resumed = false
+    /** elapsedRealtime of the last onResume: the quick unlock only answers a PC lock older than that. */
+    @Volatile private var resumedAt = 0L
     @Volatile private var volumeKeysFlipPages = true
+    /** True while a fingerprint unlock (prompt + answer) is in progress; a second one is ignored. */
+    private val unlockBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** Touch to unlock the PC screen: listens on the sensor while the panel asks for it and is visible. Android 9+ only; every use is behind an SDK_INT >= 28 check. */
+    @get:RequiresApi(28)
+    private val unlockListener by lazy {
+        if (Build.VERSION.SDK_INT >= 28) newUnlockListener() else error("touch to unlock needs Android 9+")
+    }
+
+    @RequiresApi(28)
+    private fun newUnlockListener() =
+        UnlockListener(
+            sensor = UnlockKey(this).fingerprintSensor(miss = ::tick),
+            unlock = { signScreenNow() },
+            report = { state ->
+                if (!destroyed) web.evaluateJavascript("window.pbUnlockListen && window.pbUnlockListen(${JSONObject.quote(state)})", null)
+            },
+            background = { Thread(it).start() },
+            main = { runOnUiThread(it) },
+            later = { ms, block -> standbyHandler.postDelayed(block, ms) },
+            tryNow = { signScreenNow(quick = true) },
+            now = { android.os.SystemClock.elapsedRealtime() },
+        )
     private val sensors by lazy { getSystemService(Context.SENSOR_SERVICE) as SensorManager? }
     private var lastLux = -1f
     private var lastLuxAt = 0L
@@ -491,6 +517,24 @@ class MainActivity : Activity(), SensorEventListener {
         setIntent(intent)
         standbyNoteAgentWake(intent)
         handlePairingLink(intent)
+        wakeIfDark()
+    }
+
+    /**
+     * The agent opens the panel with am start when the PC unlocks; on a phone that went dark with the PC (it put
+     * itself to sleep, see PanelSleepService) that alone leaves the screen off. A short wake lock lights it; the
+     * keyguard then asks for the fingerprint as usual.
+     */
+    private fun wakeIfDark() {
+        val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager ?: return
+        if (pm.isInteractive) return
+        try {
+            @Suppress("DEPRECATION")
+            pm.newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "PhoneBox:wake").acquire(3_000)
+        } catch (e: Exception) {
+            Log.w("PhoneBox", "could not light the screen: ${e.javaClass.simpleName}")
+        }
     }
 
     /** A pairing link from the computer's QR code (Settings › Wi-Fi › Pair a phone over Wi-Fi): ask, then pair. */
@@ -664,6 +708,8 @@ class MainActivity : Activity(), SensorEventListener {
         standbyDismissKeyguard()
         web.onResume()
         web.evaluateJavascript("window.onAppPause && window.onAppPause(false)", null) // the panel catches up at once
+        resumedAt = android.os.SystemClock.elapsedRealtime()
+        if (Build.VERSION.SDK_INT >= 28) unlockListener.visible(true)
         stream.start()
         hideSystemUi()
         sensors?.getDefaultSensor(Sensor.TYPE_LIGHT)?.let { sensors?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
@@ -678,6 +724,7 @@ class MainActivity : Activity(), SensorEventListener {
 
     override fun onPause() {
         resumed = false
+        if (hasWeb && Build.VERSION.SDK_INT >= 28) unlockListener.visible(false) // the sensor is never held behind another app or a dark screen
         dictation.cancel(0) // the microphone is never left open behind another app or a dark screen
         sensors?.unregisterListener(this)
         stream.stop()
@@ -690,6 +737,7 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     override fun onDestroy() {
+        if (hasWeb && Build.VERSION.SDK_INT >= 28) unlockListener.visible(false)
         destroyed = true
         resumed = false
         standbyDestroyed = true
@@ -764,6 +812,58 @@ class MainActivity : Activity(), SensorEventListener {
             view.evaluateJavascript(panelBootstrap(), null)
     }
 
+    /** A short tap of the vibrator (button presses, a finger that did not match). */
+    private fun tick() {
+        val v = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator? ?: return
+        if (!v.hasVibrator()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) v.vibrate(VibrationEffect.createOneShot(14, VibrationEffect.DEFAULT_AMPLITUDE))
+        else @Suppress("DEPRECATION") v.vibrate(14)
+    }
+
+    /** POSTs JSON to the agent (blocking) and returns the HTTP status. */
+    private fun agentPost(path: String, json: String): Int {
+        val r = link.request("POST", path, json.toByteArray(Charsets.UTF_8), "application/json")
+        try { r.body.close() } catch (_: Exception) {}
+        return r.code
+    }
+
+    /**
+     * Signs the screen challenge the agent expects *now* with the unlock key, which a fingerprint must have opened
+     * within the last few seconds, and sends it. Blocking; call off the UI thread. True when the PC unlocked, false
+     * when it refused or could not be reached, null when there is nothing to unlock (the PC is no longer locked) or no
+     * recent fingerprint opened the key.
+     *
+     * [quick] (the try right after the phone woke, nobody touched the sensor): nothing is fetched unless a fingerprint
+     * opened the key, an unreachable agent is not a failure (null), and only a PC lock older than the wake counts.
+     */
+    @RequiresApi(28)
+    private fun signScreenNow(quick: Boolean = false): Boolean? =
+        if (quick && UnlockKey(this).signNow(byteArrayOf(0)) == null) null else sendScreenSignature(quick)
+
+    @RequiresApi(28)
+    private fun sendScreenSignature(quick: Boolean): Boolean? = try {
+        val r = link.request("GET", "/api/unlock/state")
+        val text = r.body.use { it.readBytes().toString(Charsets.UTF_8) }
+        val state = if (r.code == 200) JSONObject(text) else null
+        val sinceResume = android.os.SystemClock.elapsedRealtime() - resumedAt
+        val lockedFor = state?.takeIf { it.has("lockedForMs") && !it.isNull("lockedForMs") }?.optLong("lockedForMs")
+        if (state == null) { if (quick) null else false }
+        else if (quick && !UnlockChallenge.lockedBeforeResume(lockedFor, sinceResume)) null
+        else when (val challenge = UnlockChallenge.pickScreen(state.optString("screen", ""), System.currentTimeMillis())) {
+            null -> null
+            else -> {
+                when (val raw = UnlockKey(this).signNow(challenge.toByteArray(Charsets.UTF_8))) {
+                    null -> null
+                    else -> agentPost("/api/unlock/screen",
+                        JSONObject().put("challenge", challenge).put("signature", Base64.encodeToString(raw, Base64.NO_WRAP)).toString()) == 200
+                }
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("PhoneBox", "screen unlock failed: ${e.javaClass.simpleName}")
+        if (quick) null else false
+    }
+
     inner class Bridge {
         private fun ok(key: String) = key == bridgeKey
 
@@ -808,13 +908,7 @@ class MainActivity : Activity(), SensorEventListener {
         }
 
         @JavascriptInterface
-        fun haptic(key: String) {
-            if (!ok(key)) return
-            val v = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator? ?: return
-            if (!v.hasVibrator()) return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) v.vibrate(VibrationEffect.createOneShot(14, VibrationEffect.DEFAULT_AMPLITUDE))
-            else @Suppress("DEPRECATION") v.vibrate(14)
-        }
+        fun haptic(key: String) { if (ok(key)) tick() }
 
         /** Notification vibration; pattern is a "wait,vibrate,wait,vibrate..." list of milliseconds. */
         @JavascriptInterface
@@ -873,6 +967,134 @@ class MainActivity : Activity(), SensorEventListener {
         /** Whether the volume keys flip pages (true) or change the phone's volume (false). */
         @JavascriptInterface
         fun setVolumeKeys(key: String, enabled: Boolean) { if (ok(key)) volumeKeysFlipPages = enabled }
+
+        // Phone fingerprint unlock (Android 9+): a Keystore key that signs one-time challenges only inside a
+        // fingerprint prompt (UnlockKey). What is signed, and what the prompt says, comes from the challenge alone.
+
+        /** True when this phone can hold an unlock key (Android 9+). */
+        @JavascriptInterface
+        fun unlockSupported(key: String): Boolean = ok(key) && Build.VERSION.SDK_INT >= 28
+
+        /**
+         * Creates a new unlock key and enrolls it with the agent; returns its check code, or "" on failure. The key in
+         * use stays until the agent accepted the new one, so a failed re-setup changes nothing.
+         */
+        @JavascriptInterface
+        fun unlockSetup(key: String): String {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
+            val spki = UnlockKey(this@MainActivity).replace { spki ->
+                val body = JSONObject().put("publicKey", Base64.encodeToString(spki, Base64.NO_WRAP)).toString()
+                val code = agentPost("/api/unlock/enroll", body)
+                if (code != 200) Log.w("PhoneBox", "unlock enroll failed: HTTP $code")
+                code == 200
+            } ?: return "" // e.g. no fingerprint enrolled on the phone, or the agent said no
+            return UnlockChallenge.checkCode(spki)
+        }
+
+        /**
+         * Check code of the existing unlock key, or "" when there is none (or it was invalidated and deleted). A
+         * Keystore error that does not prove the key gone returns a non-empty placeholder, so setup is not offered.
+         */
+        @JavascriptInterface
+        fun unlockCode(key: String): String {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
+            return UnlockKey(this@MainActivity).code()
+        }
+
+        /** The prompt text for a challenge, {"title","detail"}, or "" if it is not a valid challenge. */
+        @JavascriptInterface
+        fun unlockPrompt(key: String, challenge: String): String {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
+            val p = UnlockChallenge.parse(challenge) ?: return ""
+            return JSONObject().put("title", UnlockChallenge.promptTitle(p))
+                .put("detail", UnlockChallenge.promptDetail(p) ?: JSONObject.NULL).toString()
+        }
+
+        /**
+         * Asks for a fingerprint and signs [challenge]: a sudo/polkit request card ([mode] "request", answered to
+         * /api/unlock/answer under [id]) or the Unlock PC button ("screen", /api/unlock/screen). The result arrives
+         * through window.pbUnlockDone(id, ok). A second call while one is in progress is ignored.
+         */
+        @JavascriptInterface
+        fun unlockSign(key: String, id: String, challenge: String, mode: String) {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return
+            if (mode != UnlockChallenge.MODE_REQUEST && mode != UnlockChallenge.MODE_SCREEN) return
+            if (!unlockBusy.compareAndSet(false, true)) return
+            val parts = UnlockChallenge.parse(challenge)
+            if (parts == null || !UnlockChallenge.acceptable(parts, mode, System.currentTimeMillis())) {
+                Log.w("PhoneBox", "unlock challenge refused")
+                unlockFinish(id, mode, null, challenge)
+                return
+            }
+            runOnUiThread {
+                if (destroyed || isFinishing) { unlockBusy.set(false); return@runOnUiThread }
+                if (mode == UnlockChallenge.MODE_SCREEN) {
+                    // the challenge is fetched after the fingerprint: the one from the panel's last poll may be used up
+                    UnlockKey(this@MainActivity).prompt(UnlockChallenge.promptTitle(parts), null) { ok ->
+                        Thread { unlockReport(id, ok && signScreenNow() == true) }.start()
+                    }
+                    return@runOnUiThread
+                }
+                UnlockKey(this@MainActivity).sign(challenge, UnlockChallenge.promptTitle(parts), UnlockChallenge.promptDetail(parts)) { sig ->
+                    unlockFinish(id, mode, sig, challenge)
+                }
+            }
+        }
+
+        /** Sends the answer off the UI thread, then reports to the panel and frees [unlockBusy]. */
+        private fun unlockFinish(id: String, mode: String, signature: String?, challenge: String) {
+            Thread {
+                var done = false
+                try {
+                    if (mode == UnlockChallenge.MODE_REQUEST) {
+                        // a null signature declines, so the computer stops waiting at once
+                        val body = JSONObject().put("id", id).put("signature", signature ?: JSONObject.NULL).toString()
+                        done = agentPost("/api/unlock/answer", body) == 200 && signature != null
+                    }
+                } catch (e: Exception) {
+                    Log.w("PhoneBox", "unlock answer failed: ${e.javaClass.simpleName}")
+                } finally {
+                    unlockReport(id, done)
+                }
+            }.start()
+        }
+
+        /** Frees [unlockBusy] and reports the end of an unlockSign to the panel. */
+        private fun unlockReport(id: String, done: Boolean) {
+            unlockBusy.set(false)
+            val js = "window.pbUnlockDone && window.pbUnlockDone(${JSONObject.quote(id)}, $done)"
+            runOnUiThread { if (!destroyed) web.evaluateJavascript(js, null) }
+        }
+
+        /** Whether the panel can turn the screen off itself: the accessibility service is on (Android 9+). */
+        @JavascriptInterface
+        fun canSleep(key: String): Boolean = ok(key) && Build.VERSION.SDK_INT >= 28 && PanelSleepService.connected != null
+
+        /** Screen off and keyguard locked, like the power button; false without the accessibility service. */
+        @JavascriptInterface
+        fun sleepPhone(key: String): Boolean {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return false
+            val service = PanelSleepService.connected ?: return false
+            runOnUiThread { if (!service.lockNow()) Log.w("PhoneBox", "lock screen refused") }
+            return true
+        }
+
+        /** Opens Settings › Accessibility, where the user turns on PhoneBox's screen-off service. */
+        @JavascriptInterface
+        fun openAccessibilitySettings(key: String) {
+            if (!ok(key)) return
+            runOnUiThread {
+                try { startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                catch (e: Exception) { Log.w("PhoneBox", "accessibility settings unavailable: ${e.javaClass.simpleName}") }
+            }
+        }
+
+        /** Touch to unlock: the panel asks to listen while the PC is locked (and no sudo card is shown), or to stop. */
+        @JavascriptInterface
+        fun unlockListen(key: String, on: Boolean) {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return
+            runOnUiThread { if (!destroyed) unlockListener.want(on) }
+        }
 
         /** Whether the phone is set to 24-hour time (Settings › System › Date & time). */
         @JavascriptInterface
