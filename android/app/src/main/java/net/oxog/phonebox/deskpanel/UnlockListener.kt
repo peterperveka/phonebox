@@ -11,8 +11,9 @@ package net.oxog.phonebox.deskpanel
  * [main] brings the [unlock] result back there.
  *
  * A repeated want(true) re-reports the current state, so a panel that reloaded learns it again. A sensor error is
- * either final (lockout, no fingerprints: stopped) or transient (cancelled by the system, hardware busy): a transient
- * one retries through [later], and the third in a row without a touch stops.
+ * final (permanent lockout, no fingerprints: stopped until the next want), a timed lockout (Android's 30 s after too
+ * many wrong fingers: stopped, then listening again through [later]) or transient (cancelled by the system, hardware
+ * busy): a transient one retries after a second, and the third in a row without a touch stops.
  *
  * Quick try: when the listener becomes active within [QUICK_MS] of the panel coming back to the front, it first runs
  * [tryNow] (on [background]) without the sensor: the phone's own fingerprint unlock may already have opened the key.
@@ -26,14 +27,15 @@ class UnlockListener<S>(
     private val report: (String) -> Unit,
     private val background: (() -> Unit) -> Unit,
     private val main: (() -> Unit) -> Unit,
-    private val later: (() -> Unit) -> Unit,
+    private val later: (delayMs: Long, block: () -> Unit) -> Unit,
     private val tryNow: () -> Boolean?,
     private val now: () -> Long,
 ) {
     interface Sensor<S> {
         fun available(): Boolean
         /** Starts one session; returns a cancel function, or null if it could not start. */
-        fun start(onTouch: (S) -> Unit, onMiss: () -> Unit, onError: (stop: Boolean) -> Unit): (() -> Unit)?
+        /** [onError] gets 0 for a transient error, a delay (ms) after which to listen again, or null for a final one. */
+        fun start(onTouch: (S) -> Unit, onMiss: () -> Unit, onError: (retryMs: Long?) -> Unit): (() -> Unit)?
     }
 
     private var wanted = false
@@ -43,6 +45,7 @@ class UnlockListener<S>(
     private var cancel: (() -> Unit)? = null
     private var session = 0
     private var transient = 0
+    private var wantGen = 0
     private var resumedAt = Long.MIN_VALUE
     private var quickUsed = true
 
@@ -50,7 +53,7 @@ class UnlockListener<S>(
         if (on && wanted) {
             if (stopped) report("stopped") else if (cancel != null) report("listening")
         }
-        if (!on) { stopped = false; transient = 0 }
+        if (!on) { stopped = false; transient = 0; wantGen++ }
         wanted = on
         reconsider()
     }
@@ -74,7 +77,7 @@ class UnlockListener<S>(
         val c = sensor.start(
             onTouch = { s -> if (id == session && cancel != null) touched(s) },
             onMiss = {},
-            onError = { final -> if (id == session && cancel != null) errored(final) },
+            onError = { retry -> if (id == session && cancel != null) errored(retry) },
         ) ?: return stop()
         cancel = c
         report("listening")
@@ -97,10 +100,18 @@ class UnlockListener<S>(
         }
     }
 
-    private fun errored(final: Boolean) {
+    private fun errored(retryMs: Long?) {
         cancel = null
-        if (final || ++transient >= MAX_TRANSIENT) return stop()
-        later { reconsider() }
+        when {
+            retryMs == null -> stop()
+            retryMs > 0 -> {
+                stop()
+                val gen = wantGen
+                later(retryMs) { if (gen == wantGen && stopped) { stopped = false; transient = 0; reconsider() } }
+            }
+            ++transient >= MAX_TRANSIENT -> stop()
+            else -> later(TRANSIENT_RETRY_MS) { reconsider() }
+        }
     }
 
     private fun touched(s: S) {
@@ -126,8 +137,11 @@ class UnlockListener<S>(
         report("stopped")
     }
 
-    private companion object {
+    companion object {
         const val MAX_TRANSIENT = 3
+        const val TRANSIENT_RETRY_MS = 1_000L
+        /** Android's timed fingerprint lockout after too many wrong fingers. */
+        const val LOCKOUT_RETRY_MS = 30_000L
         const val QUICK_MS = 5_000L
     }
 }

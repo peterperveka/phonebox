@@ -189,7 +189,7 @@ class UnlockKey(private val activity: Activity) : UnlockKeyRotation.Slots {
                 probe() == UnlockKeyRotation.State.OK
         } catch (e: Exception) { false }
 
-        override fun start(onTouch: (Unit) -> Unit, onMiss: () -> Unit, onError: (stop: Boolean) -> Unit): (() -> Unit)? {
+        override fun start(onTouch: (Unit) -> Unit, onMiss: () -> Unit, onError: (retryMs: Long?) -> Unit): (() -> Unit)? {
             val m = fm() ?: return null
             val signal = CancellationSignal()
             val callback = object : FingerprintManager.AuthenticationCallback() {
@@ -197,9 +197,13 @@ class UnlockKey(private val activity: Activity) : UnlockKeyRotation.Slots {
                 override fun onAuthenticationFailed() { miss(); onMiss() }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
                     Log.i(TAG, "touch unlock: sensor stopped ($errorCode)")
-                    // cancelled by the system or the hardware busy for a moment: try again; anything else stops
-                    onError(errorCode != FingerprintManager.FINGERPRINT_ERROR_CANCELED &&
-                        errorCode != FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE)
+                    // cancelled by the system or the hardware busy for a moment: try again; Android's timed lockout: try
+                    // again once it is over; anything else stops
+                    onError(when (errorCode) {
+                        FingerprintManager.FINGERPRINT_ERROR_CANCELED, FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE -> 0L
+                        FingerprintManager.FINGERPRINT_ERROR_LOCKOUT -> UnlockListener.LOCKOUT_RETRY_MS
+                        else -> null
+                    })
                 }
             }
             return try {

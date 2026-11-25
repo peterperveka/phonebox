@@ -10,10 +10,10 @@ class UnlockListenerTest {
         var cancels = 0
         var onTouch: ((String) -> Unit)? = null
         var onMiss: (() -> Unit)? = null
-        var onError: ((Boolean) -> Unit)? = null
+        var onError: ((Long?) -> Unit)? = null
         override fun available() = available
         val order = mutableListOf<String>()
-        override fun start(onTouch: (String) -> Unit, onMiss: () -> Unit, onError: (Boolean) -> Unit): (() -> Unit)? {
+        override fun start(onTouch: (String) -> Unit, onMiss: () -> Unit, onError: (Long?) -> Unit): (() -> Unit)? {
             starts++
             order += "start"
             this.onTouch = onTouch; this.onMiss = onMiss; this.onError = onError
@@ -33,7 +33,7 @@ class UnlockListenerTest {
         report = { reports += it },
         background = { if (deferBackground) deferred += it else it() },
         main = { it() },
-        later = { deferredLater += it },
+        later = { ms, block -> delays += ms; deferredLater += block },
         tryNow = { quickCalls++; sensor.order += "quick"; quick },
         now = { clock },
     )
@@ -41,6 +41,7 @@ class UnlockListenerTest {
     private var quick: Boolean? = null
     private var quickCalls = 0
     private val deferredLater = mutableListOf<() -> Unit>()
+    private val delays = mutableListOf<Long>()
     private fun runLater() { val l = deferredLater.toList(); deferredLater.clear(); l.forEach { it() } }
 
     private fun on() { listener.want(true); listener.visible(true) }
@@ -97,7 +98,7 @@ class UnlockListenerTest {
 
     @Test fun errorStopsUntilWantedAgain() {
         on()
-        sensor.onError!!(true)
+        sensor.onError!!(null)
         assertEquals(listOf("listening", "stopped"), reports)
         listener.visible(false); listener.visible(true)
         assertEquals(1, sensor.starts)
@@ -125,7 +126,7 @@ class UnlockListenerTest {
 
     @Test fun repeatedWantReReportsStopped() {
         on()
-        sensor.onError!!(true)
+        sensor.onError!!(null)
         listener.want(true)
         assertEquals(listOf("listening", "stopped", "stopped"), reports)
     }
@@ -139,7 +140,7 @@ class UnlockListenerTest {
 
     @Test fun transientErrorRetriesLater() {
         on()
-        sensor.onError!!(false)
+        sensor.onError!!(0L)
         assertEquals(listOf("listening"), reports)
         runLater()
         assertEquals(2, sensor.starts)
@@ -147,7 +148,7 @@ class UnlockListenerTest {
 
     @Test fun threeTransientErrorsInARowStop() {
         on()
-        repeat(3) { sensor.onError!!(false); runLater() }
+        repeat(3) { sensor.onError!!(0L); runLater() }
         assertEquals(listOf("listening", "listening", "listening", "stopped"), reports)
     }
 
@@ -156,7 +157,7 @@ class UnlockListenerTest {
         val oldTouch = sensor.onTouch!!
         val oldError = sensor.onError!!
         listener.visible(false); listener.visible(true)
-        oldTouch("sig"); oldError(true)
+        oldTouch("sig"); oldError(null)
         assertEquals(listOf("listening", "listening"), reports)
         assertEquals(2, sensor.starts)
     }
@@ -205,5 +206,23 @@ class UnlockListenerTest {
         sensor.onTouch!!("sig")
         assertEquals(2, quickCalls)
         assertEquals(3, sensor.starts)
+    }
+
+    @Test fun lockoutRetriesAfterThirtySeconds() {
+        on()
+        sensor.onError!!(30_000L)
+        assertEquals("stopped", reports.last())
+        assertEquals(listOf(30_000L), delays)
+        runLater()
+        assertEquals(2, sensor.starts)
+        assertEquals("listening", reports.last())
+    }
+
+    @Test fun lockoutRetryCancelledByWantOff() {
+        on()
+        sensor.onError!!(30_000L)
+        listener.want(false)
+        runLater()
+        assertEquals(1, sensor.starts)
     }
 }
