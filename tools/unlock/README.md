@@ -9,7 +9,8 @@ do kópie; vrátenie = `rm /etc/pam.d/polkit-1`. Testuj v *novom* termináli a k
 `sudo /usr/local/lib/phonebox/phonebox-unlock enroll`. Samoaktualizáciu PhoneBoxu vypni, inak ti prepíše tento build.
 Kábel na USB musí byť dátový (terajší len nabíja).
 Zamknuté PC odomkneš priložením prsta na snímač telefónu, bez okna na telefóne (len pre obrazovku; sudo a polkit
-ostávajú s oknom).
+ostávajú s oknom). So zaškrtnutým „Follow the computer lock“ Super+L uspí aj mobil a jedno stlačenie tlačidla
+napájania s prstom odomkne mobil aj PC. Po aktualizácii treba raz znova nastaviť kľúč na telefóne a spustiť `enroll`.
 
 Commands are for this machine (Fedora, GNOME, user in `$USER`). Run everything from the repository root of this branch.
 
@@ -86,7 +87,8 @@ cannot unlock the screen.
 
 **After every new setup on the phone** (a new phone, a reinstalled app, a new fingerprint, or tapping setup again) run
 `sudo /usr/local/lib/phonebox/phonebox-unlock enroll` again and compare the new code; until then sudo, polkit and the
-screen unlock fall back to the password. A setup that fails keeps the old key working.
+screen unlock fall back to the password. A setup that fails keeps the old key working. Updating to the build with the 5 s window key needs one new setup on the phone and `enroll` (the panel offers
+**Set up fingerprint unlock** by itself).
 
 ## 4. Open a root shell and leave it open
 
@@ -173,6 +175,12 @@ approve).
 
 After too many wrong fingers Android stops the sensor for a while; the phone then shows the **Unlock PC** button again:
 tap it and use the fingerprint in the dialog. Your password always works too.
+
+**Sleep with the PC, one touch wakes both.** In the agent settings tick **Follow the computer lock** (needs ADB).
+Super+L then also turns the phone screen off. Press the phone's power button and leave the finger on it: the phone
+unlocks with its fingerprint and, within a second, the PC unlocks too. The unlock key opens for 5 s after any
+fingerprint, so the phone's own unlock is enough. If you unlock the phone with its PIN instead, the panel shows the
+touch hint: touch the sensor once more.
 
 ## 8. Undo
 
