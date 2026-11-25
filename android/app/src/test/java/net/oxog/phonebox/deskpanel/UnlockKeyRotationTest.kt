@@ -82,4 +82,8 @@ class UnlockKeyRotationTest {
         assertEquals(UnlockKeyRotation.UNKNOWN, UnlockKeyRotation.code(UnlockKeyRotation.State.OK, null))
         assertTrue(UnlockKeyRotation.UNKNOWN.isNotEmpty())
     }
+
+    @Test fun outdatedKeyCountsAsMissing() {
+        assertEquals("", UnlockKeyRotation.code(UnlockKeyRotation.State.OUTDATED, byteArrayOf(1)))
+    }
 }

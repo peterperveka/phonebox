@@ -14,7 +14,8 @@ object UnlockKeyRotation {
     /** What [code] returns when the key could not be read just now: not "", so the panel does not offer setup. */
     const val UNKNOWN = "?"
 
-    enum class State { OK, MISSING, INVALIDATED, ERROR }
+    /** OUTDATED: a key from before the 5 s window (per use); the panel offers setup to replace it. */
+    enum class State { OK, MISSING, INVALIDATED, OUTDATED, ERROR }
 
     interface Slots {
         fun activeAlias(): String
@@ -58,7 +59,7 @@ object UnlockKeyRotation {
 
     /** The check code for the panel: "" only when the key is confirmed gone; [UNKNOWN] on a transient error. */
     fun code(state: State, spki: ByteArray?): String = when (state) {
-        State.MISSING, State.INVALIDATED -> ""
+        State.MISSING, State.INVALIDATED, State.OUTDATED -> ""
         State.ERROR -> UNKNOWN
         State.OK -> spki?.let { UnlockChallenge.checkCode(it) } ?: UNKNOWN
     }

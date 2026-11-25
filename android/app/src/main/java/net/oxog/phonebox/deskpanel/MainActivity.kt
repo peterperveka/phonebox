@@ -90,14 +90,14 @@ class MainActivity : Activity(), SensorEventListener {
     private val unlockListener by lazy {
         UnlockListener(
             sensor = UnlockKey(this).fingerprintSensor(miss = ::tick),
-            unlock = ::signScreenNow,
+            unlock = { signScreenNow() },
             report = { state ->
                 if (!destroyed) web.evaluateJavascript("window.pbUnlockListen && window.pbUnlockListen(${JSONObject.quote(state)})", null)
             },
             background = { Thread(it).start() },
             main = { runOnUiThread(it) },
             later = { standbyHandler.postDelayed(it, 1000) },
-            tryNow = { null },
+            tryNow = { signScreenNow() },
             now = { android.os.SystemClock.elapsedRealtime() },
         )
     }
@@ -803,20 +803,24 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     /**
-     * Signs the screen challenge the agent expects *now* with a signer a fingerprint just unlocked, and sends it.
-     * Blocking; call off the UI thread. True when the PC unlocked, false when it refused or could not be reached, null
-     * when there is nothing to unlock (the PC is no longer locked).
+     * Signs the screen challenge the agent expects *now* with the unlock key, which a fingerprint must have opened
+     * within the last few seconds, and sends it. Blocking; call off the UI thread. True when the PC unlocked, false
+     * when it refused or could not be reached, null when there is nothing to unlock (the PC is no longer locked) or no
+     * recent fingerprint opened the key.
      */
-    private fun signScreenNow(signer: java.security.Signature): Boolean? = try {
+    @RequiresApi(28)
+    private fun signScreenNow(): Boolean? = try {
         val r = link.request("GET", "/api/unlock/state")
         val text = r.body.use { it.readBytes().toString(Charsets.UTF_8) }
         if (r.code != 200) false
         else when (val challenge = UnlockChallenge.pickScreen(JSONObject(text).optString("screen", ""), System.currentTimeMillis())) {
             null -> null
             else -> {
-                signer.update(challenge.toByteArray(Charsets.UTF_8))
-                val sig = Base64.encodeToString(signer.sign(), Base64.NO_WRAP)
-                agentPost("/api/unlock/screen", JSONObject().put("challenge", challenge).put("signature", sig).toString()) == 200
+                when (val raw = UnlockKey(this).signNow(challenge.toByteArray(Charsets.UTF_8))) {
+                    null -> null
+                    else -> agentPost("/api/unlock/screen",
+                        JSONObject().put("challenge", challenge).put("signature", Base64.encodeToString(raw, Base64.NO_WRAP)).toString()) == 200
+                }
             }
         }
     } catch (e: Exception) {
@@ -990,8 +994,8 @@ class MainActivity : Activity(), SensorEventListener {
                 if (destroyed || isFinishing) { unlockBusy.set(false); return@runOnUiThread }
                 if (mode == UnlockChallenge.MODE_SCREEN) {
                     // the challenge is fetched after the fingerprint: the one from the panel's last poll may be used up
-                    UnlockKey(this@MainActivity).prompt(UnlockChallenge.promptTitle(parts), null) { signer ->
-                        Thread { unlockReport(id, signer != null && signScreenNow(signer) == true) }.start()
+                    UnlockKey(this@MainActivity).prompt(UnlockChallenge.promptTitle(parts), null) { ok ->
+                        Thread { unlockReport(id, ok && signScreenNow() == true) }.start()
                     }
                     return@runOnUiThread
                 }
