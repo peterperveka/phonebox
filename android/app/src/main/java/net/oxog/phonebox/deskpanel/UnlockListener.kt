@@ -1,0 +1,83 @@
+package net.oxog.phonebox.deskpanel
+
+/**
+ * Touch to unlock the PC screen: decides when the fingerprint sensor is listened to and restarts it after each touch.
+ * It listens while the panel wants it (the PC is locked) and the panel is visible, unless Android stopped the sensor
+ * (e.g. lockout after too many wrong fingers); the next "want" after a "don't want" tries again.
+ *
+ * A touch ends the session; [unlock] then runs on [background] with the authenticated signer and returns true
+ * (unlocked), false (refused or unreachable) or null (nothing to unlock any more). Results go to [report]:
+ * "listening", "unlocked", "failed", "stopped". All public calls and sensor callbacks must arrive on the main thread;
+ * [main] brings the [unlock] result back there.
+ */
+class UnlockListener<S>(
+    private val sensor: Sensor<S>,
+    private val unlock: (S) -> Boolean?,
+    private val report: (String) -> Unit,
+    private val background: (() -> Unit) -> Unit,
+    private val main: (() -> Unit) -> Unit,
+) {
+    interface Sensor<S> {
+        fun available(): Boolean
+        /** Starts one session; returns a cancel function, or null if it could not start. */
+        fun start(onTouch: (S) -> Unit, onMiss: () -> Unit, onError: () -> Unit): (() -> Unit)?
+    }
+
+    private var wanted = false
+    private var shown = false
+    private var stopped = false
+    private var busy = false
+    private var cancel: (() -> Unit)? = null
+    private var session = 0
+
+    fun want(on: Boolean) {
+        if (!on) stopped = false
+        wanted = on
+        reconsider()
+    }
+
+    fun visible(on: Boolean) {
+        shown = on
+        reconsider()
+    }
+
+    private fun reconsider() {
+        if (!(wanted && shown && !stopped)) {
+            cancel?.invoke()
+            cancel = null
+            return
+        }
+        if (cancel != null || busy) return
+        if (!sensor.available()) return stop()
+        val id = ++session
+        val c = sensor.start(
+            onTouch = { s -> if (id == session && cancel != null) touched(s) },
+            onMiss = {},
+            onError = { if (id == session && cancel != null) { cancel = null; stop() } },
+        ) ?: return stop()
+        cancel = c
+        report("listening")
+    }
+
+    private fun touched(s: S) {
+        cancel = null
+        busy = true
+        background {
+            val r = try { unlock(s) } catch (_: Exception) { false }
+            main {
+                busy = false
+                when (r) {
+                    true -> report("unlocked")
+                    false -> report("failed")
+                    null -> {}
+                }
+                reconsider()
+            }
+        }
+    }
+
+    private fun stop() {
+        stopped = true
+        report("stopped")
+    }
+}

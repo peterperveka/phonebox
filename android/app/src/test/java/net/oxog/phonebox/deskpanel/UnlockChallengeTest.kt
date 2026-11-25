@@ -16,6 +16,18 @@ class UnlockChallengeTest {
 
     private fun parts(purpose: String, command: String) = UnlockChallenge.parse(challenge(purpose, command))!!
 
+    @Test fun pickScreenAcceptsAFreshScreenChallenge() {
+        val c = challenge("screen", "-")
+        assertEquals(c, UnlockChallenge.pickScreen(c, now))
+    }
+
+    @Test fun pickScreenRejectsExpiredOtherPurposeAndNull() {
+        assertNull(UnlockChallenge.pickScreen(challenge("screen", "-"), 2000L))
+        assertNull(UnlockChallenge.pickScreen(challenge("sudo", "ls"), now))
+        assertNull(UnlockChallenge.pickScreen(null, now))
+        assertNull(UnlockChallenge.pickScreen("", now))
+    }
+
     @Test fun parsesAGoodChallenge() {
         val p = UnlockChallenge.parse(challenge("sudo", "sudo dnf up"))
         assertEquals(UnlockChallenge.Parts("sudo", "peter", "fedora", "sudo dnf up", nonce, 2000L), p)

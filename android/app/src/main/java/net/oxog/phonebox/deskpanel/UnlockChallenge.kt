@@ -46,6 +46,12 @@ object UnlockChallenge {
         return purposeOk && p.expiresAt > nowMs
     }
 
+    /** [screen] if it is a screen challenge the phone may sign at [nowMs], else null. */
+    fun pickScreen(screen: String?, nowMs: Long): String? {
+        val p = parse(screen ?: return null) ?: return null
+        return if (acceptable(p, MODE_SCREEN, nowMs)) screen else null
+    }
+
     fun promptTitle(p: Parts): String {
         val who = "${clean(p.user)}@${clean(p.host)}"
         return when (p.purpose) {
