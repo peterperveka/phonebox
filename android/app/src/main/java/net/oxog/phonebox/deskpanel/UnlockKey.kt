@@ -4,8 +4,11 @@ import android.app.Activity
 import android.content.Context
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
+import android.hardware.fingerprint.FingerprintManager
 import android.os.Build
 import android.os.CancellationSignal
+import android.os.Handler
+import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
@@ -109,16 +112,32 @@ class UnlockKey(private val activity: Activity) : UnlockKeyRotation.Slots {
         return UnlockKeyRotation.State.INVALIDATED to null
     }
 
-    private fun signer(): Signature? = probe().second
+    /** A fresh signer for the active key, not yet authenticated; null when the key is missing or unusable. */
+    internal fun signer(): Signature? = probe().second
 
     /**
      * Shows the fingerprint prompt and signs [challenge] (its UTF-8 bytes) with the key. [onDone] runs once, on the
      * UI thread: the base64 DER signature, or null if the user cancelled, the prompt failed or the key is unusable.
      * Call on the UI thread.
      */
-    fun sign(challenge: String, title: String, detail: String?, onDone: (String?) -> Unit) {
+    fun sign(challenge: String, title: String, detail: String?, onDone: (String?) -> Unit) =
+        prompt(title, detail) { s ->
+            onDone(try {
+                s?.update(challenge.toByteArray(Charsets.UTF_8))
+                s?.sign()?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
+            } catch (e: Exception) {
+                Log.w(TAG, "signing failed: ${e.javaClass.simpleName}")
+                null
+            })
+        }
+
+    /**
+     * Shows the fingerprint prompt; [onDone] runs once, on the UI thread, with the signer the fingerprint unlocked
+     * (feed it the bytes to sign), or null if the user cancelled, the prompt failed or the key is unusable.
+     */
+    fun prompt(title: String, detail: String?, onDone: (Signature?) -> Unit) {
         var done = false
-        val finish = { result: String? -> if (!done) { done = true; onDone(result) } }
+        val finish = { result: Signature? -> if (!done) { done = true; onDone(result) } }
         val signature = signer() ?: return finish(null)
         val executor = activity.mainExecutor
         val prompt = BiometricPrompt.Builder(activity)
@@ -129,14 +148,7 @@ class UnlockKey(private val activity: Activity) : UnlockKeyRotation.Slots {
             .build()
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                val s = result.cryptoObject?.signature
-                finish(try {
-                    s?.update(challenge.toByteArray(Charsets.UTF_8))
-                    s?.sign()?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
-                } catch (e: Exception) {
-                    Log.w(TAG, "signing failed: ${e.javaClass.simpleName}")
-                    null
-                })
+                finish(result.cryptoObject?.signature)
             }
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) { finish(null) }
             // onAuthenticationFailed: a finger that did not match; the prompt stays open for another try.
@@ -146,6 +158,43 @@ class UnlockKey(private val activity: Activity) : UnlockKeyRotation.Slots {
         } catch (e: Exception) {
             Log.w(TAG, "fingerprint prompt failed", e)
             finish(null)
+        }
+    }
+
+    /**
+     * The sensor for touch-to-unlock ([UnlockListener]): the legacy FingerprintManager, which listens without any
+     * system dialog. Each session authenticates a fresh signer, so a touch unlocks exactly one signature. [miss] runs
+     * for a finger that did not match (the session goes on).
+     */
+    @Suppress("DEPRECATION")
+    fun fingerprintSensor(miss: () -> Unit): UnlockListener.Sensor<Signature> = object : UnlockListener.Sensor<Signature> {
+        private fun fm(): FingerprintManager? = try { activity.getSystemService(FingerprintManager::class.java) } catch (_: Exception) { null }
+
+        override fun available(): Boolean = try {
+            fm()?.let { it.isHardwareDetected && it.hasEnrolledFingerprints() } == true
+        } catch (e: Exception) { false }
+
+        override fun start(onTouch: (Signature) -> Unit, onMiss: () -> Unit, onError: () -> Unit): (() -> Unit)? {
+            val m = fm() ?: return null
+            val signature = signer() ?: return null
+            val signal = CancellationSignal()
+            val callback = object : FingerprintManager.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: FingerprintManager.AuthenticationResult) {
+                    result.cryptoObject?.signature?.let(onTouch) ?: onError()
+                }
+                override fun onAuthenticationFailed() { miss(); onMiss() }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                    Log.i(TAG, "touch unlock: sensor stopped ($errorCode)")
+                    onError()
+                }
+            }
+            return try {
+                m.authenticate(FingerprintManager.CryptoObject(signature), signal, 0, callback, Handler(Looper.getMainLooper()))
+                ({ signal.cancel() })
+            } catch (e: Exception) {
+                Log.w(TAG, "touch unlock: could not listen", e)
+                null
+            }
         }
     }
 

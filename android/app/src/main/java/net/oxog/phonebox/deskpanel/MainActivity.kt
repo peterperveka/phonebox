@@ -50,6 +50,7 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import org.json.JSONArray
+import androidx.annotation.RequiresApi
 import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -84,6 +85,19 @@ class MainActivity : Activity(), SensorEventListener {
     @Volatile private var volumeKeysFlipPages = true
     /** True while a fingerprint unlock (prompt + answer) is in progress; a second one is ignored. */
     private val unlockBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** Touch to unlock the PC screen: listens on the sensor while the panel asks for it and is visible. Android 9+ only; every use is behind an SDK_INT >= 28 check. */
+    @get:RequiresApi(28)
+    private val unlockListener by lazy {
+        UnlockListener(
+            sensor = UnlockKey(this).fingerprintSensor(miss = ::tick),
+            unlock = ::signScreenNow,
+            report = { state ->
+                if (!destroyed) web.evaluateJavascript("window.pbUnlockListen && window.pbUnlockListen(${JSONObject.quote(state)})", null)
+            },
+            background = { Thread(it).start() },
+            main = { runOnUiThread(it) },
+        )
+    }
     private val sensors by lazy { getSystemService(Context.SENSOR_SERVICE) as SensorManager? }
     private var lastLux = -1f
     private var lastLuxAt = 0L
@@ -667,6 +681,7 @@ class MainActivity : Activity(), SensorEventListener {
         standbyDismissKeyguard()
         web.onResume()
         web.evaluateJavascript("window.onAppPause && window.onAppPause(false)", null) // the panel catches up at once
+        if (Build.VERSION.SDK_INT >= 28) unlockListener.visible(true)
         stream.start()
         hideSystemUi()
         sensors?.getDefaultSensor(Sensor.TYPE_LIGHT)?.let { sensors?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
@@ -681,6 +696,7 @@ class MainActivity : Activity(), SensorEventListener {
 
     override fun onPause() {
         resumed = false
+        if (hasWeb && Build.VERSION.SDK_INT >= 28) unlockListener.visible(false) // the sensor is never held behind another app or a dark screen
         dictation.cancel(0) // the microphone is never left open behind another app or a dark screen
         sensors?.unregisterListener(this)
         stream.stop()
@@ -693,6 +709,7 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     override fun onDestroy() {
+        if (hasWeb && Build.VERSION.SDK_INT >= 28) unlockListener.visible(false)
         destroyed = true
         resumed = false
         standbyDestroyed = true
@@ -767,6 +784,43 @@ class MainActivity : Activity(), SensorEventListener {
             view.evaluateJavascript(panelBootstrap(), null)
     }
 
+    /** A short tap of the vibrator (button presses, a finger that did not match). */
+    private fun tick() {
+        val v = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator? ?: return
+        if (!v.hasVibrator()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) v.vibrate(VibrationEffect.createOneShot(14, VibrationEffect.DEFAULT_AMPLITUDE))
+        else @Suppress("DEPRECATION") v.vibrate(14)
+    }
+
+    /** POSTs JSON to the agent (blocking) and returns the HTTP status. */
+    private fun agentPost(path: String, json: String): Int {
+        val r = link.request("POST", path, json.toByteArray(Charsets.UTF_8), "application/json")
+        try { r.body.close() } catch (_: Exception) {}
+        return r.code
+    }
+
+    /**
+     * Signs the screen challenge the agent expects *now* with a signer a fingerprint just unlocked, and sends it.
+     * Blocking; call off the UI thread. True when the PC unlocked, false when it refused or could not be reached, null
+     * when there is nothing to unlock (the PC is no longer locked).
+     */
+    private fun signScreenNow(signer: java.security.Signature): Boolean? = try {
+        val r = link.request("GET", "/api/unlock/state")
+        val text = r.body.use { it.readBytes().toString(Charsets.UTF_8) }
+        if (r.code != 200) false
+        else when (val challenge = UnlockChallenge.pickScreen(JSONObject(text).optString("screen", ""), System.currentTimeMillis())) {
+            null -> null
+            else -> {
+                signer.update(challenge.toByteArray(Charsets.UTF_8))
+                val sig = Base64.encodeToString(signer.sign(), Base64.NO_WRAP)
+                agentPost("/api/unlock/screen", JSONObject().put("challenge", challenge).put("signature", sig).toString()) == 200
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("PhoneBox", "screen unlock failed: ${e.javaClass.simpleName}")
+        false
+    }
+
     inner class Bridge {
         private fun ok(key: String) = key == bridgeKey
 
@@ -811,13 +865,7 @@ class MainActivity : Activity(), SensorEventListener {
         }
 
         @JavascriptInterface
-        fun haptic(key: String) {
-            if (!ok(key)) return
-            val v = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator? ?: return
-            if (!v.hasVibrator()) return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) v.vibrate(VibrationEffect.createOneShot(14, VibrationEffect.DEFAULT_AMPLITUDE))
-            else @Suppress("DEPRECATION") v.vibrate(14)
-        }
+        fun haptic(key: String) { if (ok(key)) tick() }
 
         /** Notification vibration; pattern is a "wait,vibrate,wait,vibrate..." list of milliseconds. */
         @JavascriptInterface
@@ -893,7 +941,7 @@ class MainActivity : Activity(), SensorEventListener {
             if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
             val spki = UnlockKey(this@MainActivity).replace { spki ->
                 val body = JSONObject().put("publicKey", Base64.encodeToString(spki, Base64.NO_WRAP)).toString()
-                val code = post("/api/unlock/enroll", body)
+                val code = agentPost("/api/unlock/enroll", body)
                 if (code != 200) Log.w("PhoneBox", "unlock enroll failed: HTTP $code")
                 code == 200
             } ?: return "" // e.g. no fingerprint enrolled on the phone, or the agent said no
@@ -937,6 +985,13 @@ class MainActivity : Activity(), SensorEventListener {
             }
             runOnUiThread {
                 if (destroyed || isFinishing) { unlockBusy.set(false); return@runOnUiThread }
+                if (mode == UnlockChallenge.MODE_SCREEN) {
+                    // the challenge is fetched after the fingerprint: the one from the panel's last poll may be used up
+                    UnlockKey(this@MainActivity).prompt(UnlockChallenge.promptTitle(parts), null) { signer ->
+                        Thread { unlockReport(id, signer != null && signScreenNow(signer) == true) }.start()
+                    }
+                    return@runOnUiThread
+                }
                 UnlockKey(this@MainActivity).sign(challenge, UnlockChallenge.promptTitle(parts), UnlockChallenge.promptDetail(parts)) { sig ->
                     unlockFinish(id, mode, sig, challenge)
                 }
@@ -951,26 +1006,28 @@ class MainActivity : Activity(), SensorEventListener {
                     if (mode == UnlockChallenge.MODE_REQUEST) {
                         // a null signature declines, so the computer stops waiting at once
                         val body = JSONObject().put("id", id).put("signature", signature ?: JSONObject.NULL).toString()
-                        done = post("/api/unlock/answer", body) == 200 && signature != null
-                    } else if (signature != null) {
-                        val body = JSONObject().put("challenge", challenge).put("signature", signature).toString()
-                        done = post("/api/unlock/screen", body) == 200
+                        done = agentPost("/api/unlock/answer", body) == 200 && signature != null
                     }
                 } catch (e: Exception) {
                     Log.w("PhoneBox", "unlock answer failed: ${e.javaClass.simpleName}")
                 } finally {
-                    unlockBusy.set(false)
-                    val js = "window.pbUnlockDone && window.pbUnlockDone(${JSONObject.quote(id)}, $done)"
-                    runOnUiThread { if (!destroyed) web.evaluateJavascript(js, null) }
+                    unlockReport(id, done)
                 }
             }.start()
         }
 
-        /** POSTs JSON to the agent (blocking) and returns the HTTP status. */
-        private fun post(path: String, json: String): Int {
-            val r = link.request("POST", path, json.toByteArray(Charsets.UTF_8), "application/json")
-            try { r.body.close() } catch (_: Exception) {}
-            return r.code
+        /** Frees [unlockBusy] and reports the end of an unlockSign to the panel. */
+        private fun unlockReport(id: String, done: Boolean) {
+            unlockBusy.set(false)
+            val js = "window.pbUnlockDone && window.pbUnlockDone(${JSONObject.quote(id)}, $done)"
+            runOnUiThread { if (!destroyed) web.evaluateJavascript(js, null) }
+        }
+
+        /** Touch to unlock: the panel asks to listen while the PC is locked (and no sudo card is shown), or to stop. */
+        @JavascriptInterface
+        fun unlockListen(key: String, on: Boolean) {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return
+            runOnUiThread { if (!destroyed) unlockListener.want(on) }
         }
 
         /** Whether the phone is set to 24-hour time (Settings › System › Date & time). */
