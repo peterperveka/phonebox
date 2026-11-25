@@ -238,3 +238,12 @@ test('without the service the bar offers to turn it on', async ({ page }) => {
   await follow(page, true);
   await expect(page.locator('#ukSleep')).toBeHidden();
 });
+
+test('a PC that locked while the panel was paused does not sleep the phone on wake', async ({ page }) => {
+  await open(page, { state: unlocked(), sleep: true });
+  await follow(page, true);
+  await page.evaluate(() => window.onAppPause(true));
+  await page.evaluate(() => { Object.assign(window.__state, { locked: true, screen: 'scr' }); window.onAppPause(false); });
+  await reload(page, {});
+  expect(await page.evaluate(() => window.__sleeps)).toBe(0);
+});

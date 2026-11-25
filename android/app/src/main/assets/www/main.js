@@ -1546,7 +1546,7 @@ $('ukSetup').addEventListener('click', () => {
 // and a panel that starts on a PC that is already locked does not put the phone to sleep.
 function followLock() {
   const now = !!(unlockState && unlockState.enabled && unlockState.locked);
-  if (lastLocked === false && now && cfg.display?.followComputerLock && typeof bridge.sleepPhone === 'function') {
+  if (!appPaused && lastLocked === false && now && cfg.display?.followComputerLock && typeof bridge.sleepPhone === 'function') {
     try { bridge.sleepPhone(); } catch (_) {}
   }
   lastLocked = now;
@@ -2943,6 +2943,9 @@ export const idle = () => appPaused || document.hidden;
 window.onAppPause = (paused) => {
   const was = idle();
   appPaused = !!paused;
+  // a lock edge only counts while the panel is in front: a PC that locked while the phone was dark is no reason to put
+  // it back to sleep the moment the user wakes it (that wake is the one-touch unlock)
+  if (appPaused) lastLocked = null;
   if (was && !idle()) wokeUp();
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !appPaused) wokeUp(); });
