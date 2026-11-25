@@ -844,7 +844,7 @@ nav a.on::before { color: var(--accent); }
         <label class="check"><input type="checkbox" data-bind="display.keepAwake"> <span data-i18n="s.kiosk.keepAwake">Keep the phone awake: turn off Android's screen saver (it starts on the charger) and keep the screen on while plugged in (set over USB)</span></label>
         <label class="check"><input type="checkbox" data-bind="display.openOnConnect"> <span data-i18n="s.kiosk.openOnConnect">Open PhoneBox when the phone is plugged in: wake the phone and bring the panel to the front whenever it connects over USB (turn off to open it yourself, for a phone you also use for app testing)</span></label>
         <label class="check"><input type="checkbox" data-bind="display.wakeOnUnlock"> <span data-i18n="s.kiosk.wakeOnUnlock">Wake and unlock: when PhoneBox opens over USB, step over a swipe-only lock screen (a PIN, pattern or password is never passed)</span></label>
-        <label class="check" id="followComputerLockOption" style="display:none"><input type="checkbox" data-bind="display.followComputerLock"> <span data-i18n="s.kiosk.followLock">Follow the computer lock: turn the phone screen off when macOS locks; wake it and open PhoneBox when macOS unlocks (ADB required; unlock phones secured by a PIN or password manually)</span></label>
+        <label class="check" id="followComputerLockOption" style="display:none"><input type="checkbox" data-bind="display.followComputerLock"> <span data-i18n="s.kiosk.followLock">Follow the computer lock: turn the phone screen off when the computer locks; wake it and open PhoneBox when it unlocks (ADB required; a phone secured by a PIN or password unlocks with its fingerprint or manually)</span></label>
         <label class="check"><input type="checkbox" data-bind="display.lockPhoneWithShortcut"> <span data-i18n="s.kiosk.lockPhoneWithShortcut">Sleep the phone with the Lock shortcut: also turn the phone screen off whenever the Lock shortcut is run (ADB required)</span></label>
         <label class="check" id="unlockOption" style="display:none"><input type="checkbox" data-bind="unlock.enabled"> <span data-i18n="s.unlock.enabled">Fingerprint unlock from the phone (sudo, password dialogs such as 1Password, and the GNOME lock screen; Linux)</span></label>
       </div>
@@ -4028,7 +4028,7 @@ async function loadInfo() {
     lhmStatus.dataset.i18n = lhmKey;
     if (lhmStatus.textContent !== lhmText) lhmStatus.textContent = lhmText;
     if ($('phoneMicCard')) { $('phoneMicCard').hidden = osName !== 'windows'; if (osName === 'windows') renderPhoneMicState(); }
-    $('followComputerLockOption').style.display = osName === 'macos' ? '' : 'none';
+    $('followComputerLockOption').style.display = osName === 'macos' || osName === 'linux' ? '' : 'none';
     $('bridgeCard').style.display = osName === 'macos' ? '' : 'none';
     $('bridgeRefused').hidden = !(osName === 'macos' && i.bridgeRefused);
     $('unlockOption').style.display = osName === 'linux' ? '' : 'none';

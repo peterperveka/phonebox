@@ -360,7 +360,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "s.kiosk.homeScreen": "Paneli telefonun ana ekranı olarak kullan: yeniden başlatmadan sonra başlar ve Ana Ekran ona döner (başlatıcıyı geri almak için kapatın)",
       "s.kiosk.keepAwake": "Telefonu uyanık tut: Android ekran korumasını kapatın (ücretsiz şarj cihazında başlar) ve bağlandığında ekranı açık tutun (USB üzerinde ayarlanır)",
       "s.kiosk.openOnConnect": "Telefon bağlandığında PhoneBox'yi aç: telefonu uyandır ve paneli USB üzerinden bağlandığında öne getir (kendin açmak için kapatın, uygulama testleri için de kullandığınız bir telefon için)",
-      "s.kiosk.followLock": "Bilgisayar kilidini izle: macOS kilitlendiğinde telefon ekranını kapatın; macOS kilidi açıldığında onu uyandır ve PhoneBox'yi açın (ADB gereklidir; PIN veya parola ile korunan telefonların kilidini el ile aç)",
+      "s.kiosk.followLock": "Bilgisayar kilidini izle: bilgisayar kilitlendiğinde telefon ekranını kapat; kilit açıldığında uyandır ve PhoneBox'ı aç (ADB gerekli; PIN veya parola ile korunan telefonun kilidini parmak iziyle ya da elle aç)",
       "s.kiosk.wakeOnUnlock": "Uyandır ve kilidi aç: PhoneBox USB üzerinden açıldığında yalnızca kaydırma isteyen kilit ekranını geçer (PIN, desen veya parola asla geçilmez)",
       "s.kiosk.lockPhoneWithShortcut": "Kilitle kısayoluyla telefonu uyut: Kilitle kısayolu her çalıştığında telefonun ekranını da kapatır (ADB gerekir)",
       "s.claude.shareConversation": "Konuşmayı telefonda göster (son mesajları ve adımlarını görmek için Claude Code oturumuna dokun; bunlar sadece telefonuna gönderilen sizin sorularınız ve Claude 'nin cevapları)",
