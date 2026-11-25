@@ -986,6 +986,7 @@
       's.kiosk.followLock': 'Follow the computer lock: turn the phone screen off when macOS locks; wake it and open PhoneBox when macOS unlocks (ADB required; unlock phones secured by a PIN or password manually)',
       's.kiosk.wakeOnUnlock': 'Wake and unlock: when PhoneBox opens over USB, step over a swipe-only lock screen (a PIN, pattern or password is never passed)',
       's.kiosk.lockPhoneWithShortcut': 'Sleep the phone with the Lock shortcut: also turn the phone screen off whenever the Lock shortcut is run (ADB required)',
+      's.unlock.enabled': 'Fingerprint unlock from the phone (sudo, password dialogs such as 1Password, and the GNOME lock screen; Linux)',
       's.claude.shareConversation': 'Show the conversation on the phone (tap a Claude Code session to see its recent messages and steps; these are your prompts and Claude\'s replies, sent only to your phone)',
       's.bridge.title': 'Phone bridge',
       's.bridge.hint': 'Share what you copy between this Mac and the paired phone (off by default). The text goes only to your own phone over the PhoneBox link and is not stored. The PhoneBox app has its own Phone bridge switch, and both must be on.',
