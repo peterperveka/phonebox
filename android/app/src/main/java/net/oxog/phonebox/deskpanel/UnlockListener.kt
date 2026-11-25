@@ -13,6 +13,11 @@ package net.oxog.phonebox.deskpanel
  * A repeated want(true) re-reports the current state, so a panel that reloaded learns it again. A sensor error is
  * either final (lockout, no fingerprints: stopped) or transient (cancelled by the system, hardware busy): a transient
  * one retries through [later], and the third in a row without a touch stops.
+ *
+ * Quick try: when the listener becomes active within [QUICK_MS] of the panel coming back to the front, it first runs
+ * [tryNow] (on [background]) without the sensor: the phone's own fingerprint unlock may already have opened the key.
+ * true/false report "unlocked"/"failed", null (no recent fingerprint) reports nothing; the sensor starts afterwards.
+ * Only right after a resume, so a fingerprint used for something else just before the PC locks never unlocks it.
  */
 class UnlockListener<S>(
     private val sensor: Sensor<S>,
@@ -21,6 +26,8 @@ class UnlockListener<S>(
     private val background: (() -> Unit) -> Unit,
     private val main: (() -> Unit) -> Unit,
     private val later: (() -> Unit) -> Unit,
+    private val tryNow: () -> Boolean?,
+    private val now: () -> Long,
 ) {
     interface Sensor<S> {
         fun available(): Boolean
@@ -35,6 +42,8 @@ class UnlockListener<S>(
     private var cancel: (() -> Unit)? = null
     private var session = 0
     private var transient = 0
+    private var resumedAt = Long.MIN_VALUE
+    private var quickUsed = true
 
     fun want(on: Boolean) {
         if (on && wanted) {
@@ -46,6 +55,7 @@ class UnlockListener<S>(
     }
 
     fun visible(on: Boolean) {
+        if (on && !shown) { resumedAt = now(); quickUsed = false }
         shown = on
         reconsider()
     }
@@ -57,6 +67,7 @@ class UnlockListener<S>(
             return
         }
         if (cancel != null || busy) return
+        if (!quickUsed && now() - resumedAt <= QUICK_MS) return quickTry()
         if (!sensor.available()) return stop()
         val id = ++session
         val c = sensor.start(
@@ -66,6 +77,23 @@ class UnlockListener<S>(
         ) ?: return stop()
         cancel = c
         report("listening")
+    }
+
+    private fun quickTry() {
+        quickUsed = true
+        busy = true
+        background {
+            val r = try { tryNow() } catch (_: Exception) { null }
+            main {
+                busy = false
+                when (r) {
+                    true -> report("unlocked")
+                    false -> report("failed")
+                    null -> {}
+                }
+                reconsider()
+            }
+        }
     }
 
     private fun errored(final: Boolean) {
@@ -99,5 +127,6 @@ class UnlockListener<S>(
 
     private companion object {
         const val MAX_TRANSIENT = 3
+        const val QUICK_MS = 5_000L
     }
 }

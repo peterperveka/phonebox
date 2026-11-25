@@ -97,6 +97,8 @@ class MainActivity : Activity(), SensorEventListener {
             background = { Thread(it).start() },
             main = { runOnUiThread(it) },
             later = { standbyHandler.postDelayed(it, 1000) },
+            tryNow = { null },
+            now = { android.os.SystemClock.elapsedRealtime() },
         )
     }
     private val sensors by lazy { getSystemService(Context.SENSOR_SERVICE) as SensorManager? }

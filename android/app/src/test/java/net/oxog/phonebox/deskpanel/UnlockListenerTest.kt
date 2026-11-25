@@ -12,8 +12,10 @@ class UnlockListenerTest {
         var onMiss: (() -> Unit)? = null
         var onError: ((Boolean) -> Unit)? = null
         override fun available() = available
+        val order = mutableListOf<String>()
         override fun start(onTouch: (String) -> Unit, onMiss: () -> Unit, onError: (Boolean) -> Unit): (() -> Unit)? {
             starts++
+            order += "start"
             this.onTouch = onTouch; this.onMiss = onMiss; this.onError = onError
             return { cancels++ }
         }
@@ -32,7 +34,12 @@ class UnlockListenerTest {
         background = { if (deferBackground) deferred += it else it() },
         main = { it() },
         later = { deferredLater += it },
+        tryNow = { quickCalls++; sensor.order += "quick"; quick },
+        now = { clock },
     )
+    private var clock = 0L
+    private var quick: Boolean? = null
+    private var quickCalls = 0
     private val deferredLater = mutableListOf<() -> Unit>()
     private fun runLater() { val l = deferredLater.toList(); deferredLater.clear(); l.forEach { it() } }
 
@@ -109,6 +116,7 @@ class UnlockListenerTest {
     @Test fun wantOffDuringUnlockDoesNotRestart() {
         deferBackground = true
         on()
+        deferred.removeAt(0)() // the quick try after the resume (returns null), then the sensor starts
         sensor.onTouch!!("sig")
         listener.want(false)
         deferred.forEach { it() }
@@ -151,5 +159,51 @@ class UnlockListenerTest {
         oldTouch("sig"); oldError(true)
         assertEquals(listOf("listening", "listening"), reports)
         assertEquals(2, sensor.starts)
+    }
+
+    @Test fun resumeTriesWithoutTheSensorFirst() {
+        quick = true
+        on()
+        assertEquals(listOf("quick", "start"), sensor.order)
+        assertEquals(listOf("unlocked", "listening"), reports)
+    }
+
+    @Test fun quickTryNullStartsTheSensorSilently() {
+        on()
+        assertEquals(1, quickCalls)
+        assertEquals(listOf("listening"), reports)
+        assertEquals(1, sensor.starts)
+    }
+
+    @Test fun quickTryFalseReportsFailedThenListens() {
+        quick = false
+        on()
+        assertEquals(listOf("failed", "listening"), reports)
+    }
+
+    @Test fun wantSoonAfterResumeTriesQuick() {
+        listener.visible(true)
+        clock = 3000
+        listener.want(true)
+        assertEquals(1, quickCalls)
+    }
+
+    @Test fun noQuickTryWhenWantArrivesLongAfterResume() {
+        listener.visible(true)
+        clock = 6000
+        listener.want(true)
+        assertEquals(0, quickCalls)
+        assertEquals(1, sensor.starts)
+    }
+
+    @Test fun oneQuickTryPerResume() {
+        on()
+        listener.visible(false)
+        clock = 100
+        listener.visible(true)
+        assertEquals(2, quickCalls)
+        sensor.onTouch!!("sig")
+        assertEquals(2, quickCalls)
+        assertEquals(3, sensor.starts)
     }
 }
