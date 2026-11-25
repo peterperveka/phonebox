@@ -27,6 +27,7 @@ public sealed class AgentConfig
     public List<string> Stocks { get; set; } = [];
     /// <summary>WorkBuddy sessions and phone approvals (off by default).</summary>
     public WorkBuddyConfig WorkBuddy { get; set; } = new();
+    public UnlockConfig Unlock { get; set; } = new();
     /// <summary>Cursor agent-transcript sessions on the AI sessions widget (off by default).</summary>
     public CursorConfig Cursor { get; set; } = new();
     /// <summary>Clipboard sharing with the paired phone (macOS only; off by default).</summary>
@@ -1380,4 +1381,11 @@ internal sealed class OptInBoolJsonConverter : JsonConverter<bool>
 
     public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options) =>
         writer.WriteBooleanValue(value);
+}
+
+/// <summary>Phone fingerprint unlock; off by default.</summary>
+public sealed class UnlockConfig
+{
+    public bool Enabled { get; set; }
+    public string? PublicKey { get; set; }
 }
