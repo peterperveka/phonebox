@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">يوجد نص إضافي غير معروض (الأحرف: %1$s، الأسطر: %2$s).</string>
     <string name="bridge_pair_again">لم يعد الـ Mac يتعرّف على هذا الهاتف: صِله مرة واحدة عبر USB أو أعد الاقتران.</string>
     <string name="bridge_send_unknown">لم يصل رد من Mac: ربما وصل النص. تحقّق على Mac قبل إرساله مجددًا.</string>
+    <string name="sleep_service_label">PhoneBox: النوم مع الكمبيوتر</string>
+    <string name="sleep_service_description">يطفئ شاشة الهاتف عند قفل الكمبيوتر. لا يقرأ PhoneBox أي شيء على الشاشة.</string>
 </resources>

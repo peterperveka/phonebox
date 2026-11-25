@@ -90,6 +90,11 @@ class MainActivity : Activity(), SensorEventListener {
     /** Touch to unlock the PC screen: listens on the sensor while the panel asks for it and is visible. Android 9+ only; every use is behind an SDK_INT >= 28 check. */
     @get:RequiresApi(28)
     private val unlockListener by lazy {
+        if (Build.VERSION.SDK_INT >= 28) newUnlockListener() else error("touch to unlock needs Android 9+")
+    }
+
+    @RequiresApi(28)
+    private fun newUnlockListener() =
         UnlockListener(
             sensor = UnlockKey(this).fingerprintSensor(miss = ::tick),
             unlock = { signScreenNow() },
@@ -102,7 +107,6 @@ class MainActivity : Activity(), SensorEventListener {
             tryNow = { signScreenNow(quick = true) },
             now = { android.os.SystemClock.elapsedRealtime() },
         )
-    }
     private val sensors by lazy { getSystemService(Context.SENSOR_SERVICE) as SensorManager? }
     private var lastLux = -1f
     private var lastLuxAt = 0L

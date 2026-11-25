@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">표시되지 않은 텍스트가 더 있습니다(문자: %1$s, 줄: %2$s).</string>
     <string name="bridge_pair_again">Mac이 더 이상 이 휴대폰을 인식하지 못합니다. USB로 한 번 연결하거나 다시 페어링하세요.</string>
     <string name="bridge_send_unknown">Mac에서 응답이 없습니다. 텍스트가 도착했을 수 있습니다. 다시 보내기 전에 Mac에서 확인하세요.</string>
+    <string name="sleep_service_label">PhoneBox: PC와 함께 절전</string>
+    <string name="sleep_service_description">PC가 잠기면 휴대폰 화면을 끕니다. PhoneBox는 화면의 내용을 읽지 않습니다.</string>
 </resources>

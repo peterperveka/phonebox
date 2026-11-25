@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">Es folgt weiterer Text, der nicht angezeigt wird (Zeichen: %1$s, Zeilen: %2$s).</string>
     <string name="bridge_pair_again">Der Mac kennt dieses Handy nicht mehr: einmal per USB verbinden oder neu koppeln.</string>
     <string name="bridge_send_unknown">Keine Antwort vom Mac: Der Text ist vielleicht angekommen. Prüfen Sie es am Mac, bevor Sie ihn erneut senden.</string>
+    <string name="sleep_service_label">PhoneBox: mit dem PC schlafen</string>
+    <string name="sleep_service_description">Schaltet den Bildschirm des Telefons aus, wenn der PC gesperrt wird. PhoneBox liest nichts auf dem Bildschirm.</string>
 </resources>

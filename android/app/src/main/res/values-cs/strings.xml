@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">Následuje další text, který se nezobrazuje (znaky: %1$s, řádky: %2$s).</string>
     <string name="bridge_pair_again">Mac už tento telefon nepoznává: připojte ho jednou přes USB nebo spárujte znovu.</string>
     <string name="bridge_send_unknown">Mac neodpověděl: text možná dorazil. Než ho pošlete znovu, zkontrolujte to na Macu.</string>
+    <string name="sleep_service_label">PhoneBox: uspat s počítačem</string>
+    <string name="sleep_service_description">Vypne obrazovku telefonu, když se počítač zamkne. PhoneBox na obrazovce nic nečte.</string>
 </resources>

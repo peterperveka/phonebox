@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">Er volgt meer tekst die niet wordt getoond (tekens: %1$s, regels: %2$s).</string>
     <string name="bridge_pair_again">De Mac herkent deze telefoon niet meer: sluit hem één keer aan via USB of koppel opnieuw.</string>
     <string name="bridge_send_unknown">Geen antwoord van de Mac: de tekst is misschien aangekomen. Controleer het op de Mac voordat je hem opnieuw stuurt.</string>
+    <string name="sleep_service_label">PhoneBox: slapen met de pc</string>
+    <string name="sleep_service_description">Zet het scherm van de telefoon uit wanneer de pc vergrendelt. PhoneBox leest niets op het scherm.</string>
 </resources>

@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">表示されていない続きのテキストがあります（文字数: %1$s、行数: %2$s）。</string>
     <string name="bridge_pair_again">Macがこのスマートフォンを認識しなくなりました。一度USBで接続するか、もう一度ペアリングしてください。</string>
     <string name="bridge_send_unknown">Mac から応答がありません。テキストは届いている可能性があります。もう一度送る前に Mac で確認してください。</string>
+    <string name="sleep_service_label">PhoneBox: PCと一緒にスリープ</string>
+    <string name="sleep_service_description">PCがロックされたときにスマートフォンの画面をオフにします。PhoneBoxは画面の内容を読み取りません。</string>
 </resources>

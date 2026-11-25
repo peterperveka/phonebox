@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">Ada teks lanjutan yang tidak ditampilkan (karakter: %1$s, baris: %2$s).</string>
     <string name="bridge_pair_again">Mac tidak lagi mengenali ponsel ini: sambungkan sekali lewat USB atau pasangkan lagi.</string>
     <string name="bridge_send_unknown">Tidak ada jawaban dari Mac: teks mungkin sudah sampai. Periksa di Mac sebelum mengirim lagi.</string>
+    <string name="sleep_service_label">PhoneBox: tidur bersama PC</string>
+    <string name="sleep_service_description">Mematikan layar ponsel saat PC terkunci. PhoneBox tidak membaca apa pun di layar.</string>
 </resources>

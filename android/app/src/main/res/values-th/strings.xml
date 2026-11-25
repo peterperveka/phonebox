@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">ยังมีข้อความต่อจากนี้ที่ไม่ได้แสดง (ตัวอักษร: %1$s, บรรทัด: %2$s)</string>
     <string name="bridge_pair_again">Mac ไม่รู้จักโทรศัพท์เครื่องนี้แล้ว: เชื่อมต่อผ่าน USB สักครั้งหรือจับคู่ใหม่</string>
     <string name="bridge_send_unknown">ไม่มีการตอบกลับจาก Mac ข้อความอาจไปถึงแล้ว ตรวจสอบที่ Mac ก่อนส่งอีกครั้ง</string>
+    <string name="sleep_service_label">PhoneBox: พักเครื่องพร้อมพีซี</string>
+    <string name="sleep_service_description">ปิดหน้าจอโทรศัพท์เมื่อพีซีล็อก PhoneBox ไม่อ่านสิ่งใดบนหน้าจอ</string>
 </resources>

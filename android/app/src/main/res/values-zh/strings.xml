@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">后面还有未显示的文本（字符：%1$s，行：%2$s）。</string>
     <string name="bridge_pair_again">Mac 已不再识别这部手机：请用 USB 连接一次，或重新配对。</string>
     <string name="bridge_send_unknown">Mac 没有响应：文字可能已经送达。再次发送前，请先在 Mac 上确认。</string>
+    <string name="sleep_service_label">PhoneBox：随电脑休眠</string>
+    <string name="sleep_service_description">电脑锁定时关闭手机屏幕。PhoneBox 不读取屏幕上的任何内容。</string>
 </resources>

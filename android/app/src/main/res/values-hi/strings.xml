@@ -34,4 +34,6 @@
     <string name="bridge_confirm_more">आगे और टेक्स्ट है जो दिखाया नहीं गया (अक्षर: %1$s, पंक्तियाँ: %2$s)।</string>
     <string name="bridge_pair_again">Mac अब इस फ़ोन को नहीं पहचानता: इसे एक बार USB से जोड़ें या फिर से पेयर करें।</string>
     <string name="bridge_send_unknown">Mac से कोई जवाब नहीं आया: टेक्स्ट शायद पहुँच गया है। दोबारा भेजने से पहले Mac पर देख लें।</string>
+    <string name="sleep_service_label">PhoneBox: पीसी के साथ स्लीप</string>
+    <string name="sleep_service_description">पीसी लॉक होने पर फ़ोन की स्क्रीन बंद कर देता है। PhoneBox स्क्रीन पर कुछ नहीं पढ़ता।</string>
 </resources>
