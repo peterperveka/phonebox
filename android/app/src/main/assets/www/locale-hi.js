@@ -110,7 +110,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.unlockPc": "पीसी अनलॉक करें",
       "unlock.setup": "फ़िंगरप्रिंट अनलॉक सेट करें",
       "unlock.failed": "अनलॉक नहीं हुआ",
-      "unlock.compare": "इस कोड को पीसी पर \"sudo phonebox-unlock enroll\" से मिलाएँ",
+      "unlock.compare": "इस कोड को पीसी पर \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\" से मिलाएँ",
       "s.unlock.enabled": "फ़ोन से फ़िंगरप्रिंट अनलॉक (sudo, 1Password जैसे पासवर्ड डायलॉग और GNOME लॉक स्क्रीन; Linux)",
       "panel.oneOfN": "1 का {n}",
       "panel.answerInTerminal": "अपने पीसी पर टर्मिनल में जवाब दें",

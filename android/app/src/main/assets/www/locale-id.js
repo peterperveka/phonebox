@@ -110,7 +110,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.unlockPc": "Buka kunci PC",
       "unlock.setup": "Siapkan buka kunci sidik jari",
       "unlock.failed": "Tidak terbuka",
-      "unlock.compare": "Cocokkan kode ini dengan \"sudo phonebox-unlock enroll\" di PC",
+      "unlock.compare": "Cocokkan kode ini dengan \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\" di PC",
       "s.unlock.enabled": "Buka kunci dengan sidik jari dari ponsel (sudo, dialog kata sandi seperti 1Password, dan layar kunci GNOME; Linux)",
       "panel.oneOfN": "1 dari {n}",
       "panel.answerInTerminal": "Jawab di terminal pada PC Anda",

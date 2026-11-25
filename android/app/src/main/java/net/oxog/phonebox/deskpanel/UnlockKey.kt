@@ -1,6 +1,7 @@
 package net.oxog.phonebox.deskpanel
 
 import android.app.Activity
+import android.content.Context
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.os.Build
@@ -21,18 +22,26 @@ import java.security.spec.ECGenParameterSpec
  * The phone's unlock key: an EC P-256 key pair created inside the Android Keystore (secure hardware where the phone
  * has it). The private key never leaves it, and because it requires user authentication for every single use, the
  * Keystore only signs with it inside a successful fingerprint prompt ([sign]). Enrolling a new fingerprint
- * invalidates the key for good; the panel then offers setup again.
+ * invalidates the key for good; the panel then offers setup again. Creating the key needs no fingerprint; a re-setup
+ * keeps the working key until the agent accepted the new one ([replace]).
  */
 @RequiresApi(28)
-class UnlockKey(private val activity: Activity) {
+class UnlockKey(private val activity: Activity) : UnlockKeyRotation.Slots {
 
     private fun store(): KeyStore = KeyStore.getInstance(STORE).apply { load(null) }
 
-    fun exists(): Boolean = try { store().containsAlias(ALIAS) } catch (e: Exception) { false }
+    private val prefs by lazy { activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
 
-    /** Creates (or replaces) the key pair and returns its public key as X.509 SubjectPublicKeyInfo (DER). */
-    fun create(): ByteArray {
-        val spec = KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
+    override fun activeAlias(): String = prefs.getString(PREF_ALIAS, null) ?: UnlockKeyRotation.LEGACY
+
+    /** Written synchronously: the old key is deleted right after, so the pointer must already be on disk. */
+    override fun setActiveAlias(alias: String) {
+        check(prefs.edit().putString(PREF_ALIAS, alias).commit()) { "could not save the active unlock key" }
+    }
+
+    /** Creates (or replaces) the key pair under [alias] and returns its public key as X.509 SubjectPublicKeyInfo (DER). */
+    override fun create(alias: String): ByteArray {
+        val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
             .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setUserAuthenticationRequired(true)
@@ -48,33 +57,59 @@ class UnlockKey(private val activity: Activity) {
         return gen.generateKeyPair().public.encoded
     }
 
-    /** The public key (SPKI DER) of the existing key, or null if there is none. */
-    fun publicKey(): ByteArray? = try { store().getCertificate(ALIAS)?.publicKey?.encoded } catch (e: Exception) { null }
-
-    fun remove() {
-        try { store().deleteEntry(ALIAS) } catch (e: Exception) { Log.w(TAG, "could not delete the unlock key", e) }
+    override fun delete(alias: String) {
+        try { store().deleteEntry(alias) } catch (e: Exception) { Log.w(TAG, "could not delete an unlock key", e) }
     }
 
     /**
-     * A Signature ready for the prompt, or null when there is no usable key. A key invalidated by a new fingerprint
-     * is deleted here. Initialising needs no authentication; signing does.
+     * Makes a new key and hands its public key to [enroll]; the new key replaces the working one only when [enroll]
+     * returns true (see [UnlockKeyRotation.rotate]). Returns the new public key (SPKI DER), or null.
      */
-    private fun signer(): Signature? {
-        val key = try { store().getKey(ALIAS, null) as? PrivateKey } catch (e: Exception) { null } ?: return null
-        return try {
-            Signature.getInstance("SHA256withECDSA").apply { initSign(key) }
+    fun replace(enroll: (ByteArray) -> Boolean): ByteArray? = UnlockKeyRotation.rotate(this, enroll)
+
+    /** Check code of the active key for the panel: "" only when it is confirmed missing or invalidated. */
+    fun code(): String {
+        val (state, _) = probe()
+        val spki = if (state == UnlockKeyRotation.State.OK) {
+            try { store().getCertificate(activeAlias())?.publicKey?.encoded } catch (e: Exception) { null }
+        } else null
+        return UnlockKeyRotation.code(state, spki)
+    }
+
+    /**
+     * The state of the active key, with a Signature ready for the prompt when it is usable. A key invalidated by a
+     * new fingerprint is deleted here; any other failure is ERROR (the key is left alone). Initialising needs no
+     * authentication; signing does.
+     */
+    private fun probe(): Pair<UnlockKeyRotation.State, Signature?> {
+        val alias = activeAlias()
+        val key = try {
+            val ks = store()
+            if (!ks.containsAlias(alias)) return UnlockKeyRotation.State.MISSING to null
+            ks.getKey(alias, null) as? PrivateKey
         } catch (e: KeyPermanentlyInvalidatedException) {
-            Log.i(TAG, "unlock key invalidated by a biometric change; deleting it")
-            remove()
-            null
+            return invalidated(alias)
+        } catch (e: Exception) {
+            Log.w(TAG, "unlock key unreadable", e)
+            return UnlockKeyRotation.State.ERROR to null
+        } ?: return UnlockKeyRotation.State.MISSING to null
+        return try {
+            UnlockKeyRotation.State.OK to Signature.getInstance("SHA256withECDSA").apply { initSign(key) }
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            invalidated(alias)
         } catch (e: Exception) {
             Log.w(TAG, "unlock key unusable", e)
-            null
+            UnlockKeyRotation.State.ERROR to null
         }
     }
 
-    /** False (and the dead key deleted) when the key was invalidated by a new fingerprint. */
-    fun usable(): Boolean = signer() != null
+    private fun invalidated(alias: String): Pair<UnlockKeyRotation.State, Signature?> {
+        Log.i(TAG, "unlock key invalidated by a biometric change; deleting it")
+        delete(alias)
+        return UnlockKeyRotation.State.INVALIDATED to null
+    }
+
+    private fun signer(): Signature? = probe().second
 
     /**
      * Shows the fingerprint prompt and signs [challenge] (its UTF-8 bytes) with the key. [onDone] runs once, on the
@@ -88,7 +123,7 @@ class UnlockKey(private val activity: Activity) {
         val executor = activity.mainExecutor
         val prompt = BiometricPrompt.Builder(activity)
             .setTitle(title)
-            .apply { if (detail != null) setSubtitle(detail) }
+            .apply { if (detail != null) setDescription(detail) } // the description wraps; a subtitle would cut a long command
             .setNegativeButton("Cancel", executor) { _, _ -> finish(null) }
             .apply { if (Build.VERSION.SDK_INT >= 30) setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG) }
             .build()
@@ -116,7 +151,8 @@ class UnlockKey(private val activity: Activity) {
 
     private companion object {
         const val STORE = "AndroidKeyStore"
-        const val ALIAS = "phonebox-unlock"
+        const val PREFS = "unlock-key"
+        const val PREF_ALIAS = "alias"
         const val TAG = "UnlockKey"
     }
 }

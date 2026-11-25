@@ -884,33 +884,30 @@ class MainActivity : Activity(), SensorEventListener {
         @JavascriptInterface
         fun unlockSupported(key: String): Boolean = ok(key) && Build.VERSION.SDK_INT >= 28
 
-        /** Creates a new unlock key and enrolls it with the agent; returns its check code, or "" on failure. */
+        /**
+         * Creates a new unlock key and enrolls it with the agent; returns its check code, or "" on failure. The key in
+         * use stays until the agent accepted the new one, so a failed re-setup changes nothing.
+         */
         @JavascriptInterface
         fun unlockSetup(key: String): String {
             if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
-            val unlock = UnlockKey(this@MainActivity)
-            val spki = try { unlock.create() } catch (e: Exception) {
-                // e.g. no fingerprint enrolled on the phone
-                Log.w("PhoneBox", "unlock key creation failed: ${e.javaClass.simpleName}: ${e.message}")
-                return ""
-            }
-            val body = JSONObject().put("publicKey", Base64.encodeToString(spki, Base64.NO_WRAP)).toString()
-            val code = post("/api/unlock/enroll", body)
-            if (code != 200) {
-                Log.w("PhoneBox", "unlock enroll failed: HTTP $code")
-                unlock.remove() // not known to the agent: the panel offers setup again
-                return ""
-            }
+            val spki = UnlockKey(this@MainActivity).replace { spki ->
+                val body = JSONObject().put("publicKey", Base64.encodeToString(spki, Base64.NO_WRAP)).toString()
+                val code = post("/api/unlock/enroll", body)
+                if (code != 200) Log.w("PhoneBox", "unlock enroll failed: HTTP $code")
+                code == 200
+            } ?: return "" // e.g. no fingerprint enrolled on the phone, or the agent said no
             return UnlockChallenge.checkCode(spki)
         }
 
-        /** Check code of the existing unlock key, or "" when there is none (or it was invalidated and deleted). */
+        /**
+         * Check code of the existing unlock key, or "" when there is none (or it was invalidated and deleted). A
+         * Keystore error that does not prove the key gone returns a non-empty placeholder, so setup is not offered.
+         */
         @JavascriptInterface
         fun unlockCode(key: String): String {
             if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
-            val unlock = UnlockKey(this@MainActivity)
-            if (!unlock.exists() || !unlock.usable()) return ""
-            return unlock.publicKey()?.let { UnlockChallenge.checkCode(it) } ?: ""
+            return UnlockKey(this@MainActivity).code()
         }
 
         /** The prompt text for a challenge, {"title","detail"}, or "" if it is not a valid challenge. */

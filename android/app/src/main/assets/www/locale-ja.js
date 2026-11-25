@@ -110,7 +110,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.unlockPc": "PCのロックを解除",
       "unlock.setup": "指紋ロック解除を設定",
       "unlock.failed": "解除されませんでした",
-      "unlock.compare": "このコードをPC上の \"sudo phonebox-unlock enroll\" と照合してください",
+      "unlock.compare": "このコードをPC上の \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\" と照合してください",
       "s.unlock.enabled": "スマートフォンの指紋で解除(sudo、1Password などのパスワード画面、GNOME のロック画面。Linux)",
       "panel.oneOfN": "1 of {n} 〜ザ・クイーン・オブ・ザ・シーズ〜",
       "panel.answerInTerminal": "PCのターミナルで返信",
