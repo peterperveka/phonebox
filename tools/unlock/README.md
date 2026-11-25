@@ -25,11 +25,14 @@ Turn **off** self-update first, or PhoneBox would replace this build with upstre
 (<http://127.0.0.1:8765>) → **Updates** → switch **Install new releases automatically** off.
 
 Agent (builds with the .NET 10 SDK, stops the running agent, copies the files to `~/.local/share/PhoneBox/app`,
-starts it again; settings in `~/.config/PhoneBox` are kept):
+then starts it again, so you have a fresh agent before the first test; settings in `~/.config/PhoneBox` are kept):
 
 ```sh
-./scripts/install.sh --autostart      # --autostart = systemd user service `phonebox`; drop it if you do not use it
+./scripts/install.sh
 ```
+
+Do not add `--autostart`: on this PC `~/.config/autostart/phonebox.desktop` already starts the agent at login, and the
+flag would add a second systemd user service, so the agent would start twice.
 
 Do not pass `--apk` here: that script may pick an older release APK from `dist/`. Build the debug APK instead:
 
@@ -50,6 +53,9 @@ PhoneBox panel on the phone afterwards.
    20-character check code it shows (format `AB12 CD34 EF56 7890 1A2B`).
 
 ## 3. Install the helper and enroll the phone key
+
+The agent must be running, the checkbox ticked and the phone set up (Step 2) first, otherwise `enroll` reports that
+there is no phone key yet.
 
 ```sh
 sudo dnf install python3-cryptography
@@ -92,7 +98,7 @@ Do not add pam_exec's `stdout` option. (`/etc/pam.d/gdm-password` is not touched
 | Command | Expected |
 |---|---|
 | `sudo -k; sudo true` | Prompt "Touch the sensor on the phone, or press Enter to type the password." The phone card shows `sudo true`. Fingerprint: succeeds with no password. |
-| `sudo -k; sudo true`, press **Enter** | Password prompt at once; the correct password works. |
+| `sudo -k; sudo true`, press **Enter** at the prompt | Password prompt at once; the correct password works. |
 | Phone Wi-Fi off, then `sudo -k; sudo true` | Password prompt with no delay. |
 | `sudo -k; echo \| sudo -S true` (no terminal) | Password path, no phone card. |
 | `ssh localhost sudo -k true` (if sshd runs) | No phone card. |
