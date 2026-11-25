@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">ยังมีข้อความต่อจากนี้ที่ไม่ได้แสดง (ตัวอักษร: %1$s, บรรทัด: %2$s)</string>
     <string name="bridge_pair_again">Mac ไม่รู้จักโทรศัพท์เครื่องนี้แล้ว: เชื่อมต่อผ่าน USB สักครั้งหรือจับคู่ใหม่</string>
     <string name="bridge_send_unknown">ไม่มีการตอบกลับจาก Mac ข้อความอาจไปถึงแล้ว ตรวจสอบที่ Mac ก่อนส่งอีกครั้ง</string>
+    <string name="bridge_notifications_switch">แสดงการแจ้งเตือนบน Mac</string>
+    <string name="bridge_notifications_help">สายเรียกเข้า ข้อความ และการแจ้งเตือนของแอปจะแสดงพร้อมข้อความบน Mac เลือกแอปทีละรายการหรือเปิดแอปทั้งหมด เปิดการแจ้งเตือนจากโทรศัพท์ในการตั้งค่าบริดจ์บน Mac ด้วย</string>
+    <string name="bridge_access_missing">ยังไม่ได้อนุญาตการเข้าถึงการแจ้งเตือน PhoneBox ต้องใช้เพื่อดูการแจ้งเตือนของคุณ</string>
+    <string name="bridge_access_granted">อนุญาตการเข้าถึงการแจ้งเตือนแล้ว</string>
+    <string name="bridge_access_button">อนุญาตการเข้าถึงการแจ้งเตือน</string>
+    <string name="bridge_restricted_help">หากสวิตช์เป็นสีเทา (Android 13 ขึ้นไป): เปิดข้อมูลแอป แตะ ⋮ ที่มุมขวาบน เลือกอนุญาตการตั้งค่าที่ถูกจำกัด แล้วกลับมาลองอีกครั้ง</string>
+    <string name="bridge_app_info_button">เปิดข้อมูลแอป</string>
+    <string name="bridge_apps_title">แอปที่แสดงบน Mac</string>
+    <string name="bridge_apps_all">ทุกแอป</string>
+    <string name="bridge_last_none">ยังไม่ได้ส่งการแจ้งเตือน</string>
+    <string name="bridge_last_ok">การแจ้งเตือนล่าสุดถึง Mac แล้ว</string>
+    <string name="bridge_last_off">การแจ้งเตือนล่าสุด: สวิตช์การแจ้งเตือนของ Mac ปิดอยู่</string>
+    <string name="bridge_last_failed">การแจ้งเตือนล่าสุดส่งไปไม่ถึง Mac ระบบจะเก็บไว้สองนาที</string>
+    <string name="bridge_access_idle">อนุญาตการเข้าถึงการแจ้งเตือนแล้ว แต่ Android ยังไม่ได้เริ่มตัวรับฟัง เปิดหน้าจอนี้อีกครั้ง หรือตรวจสอบการตั้งค่าแบตเตอรี่ของ PhoneBox</string>
     <string name="sleep_service_label">PhoneBox: พักเครื่องพร้อมพีซี</string>
     <string name="sleep_service_description">ปิดหน้าจอโทรศัพท์เมื่อพีซีล็อก PhoneBox ไม่อ่านสิ่งใดบนหน้าจอ</string>
 </resources>

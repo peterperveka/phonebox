@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Er volgt meer tekst die niet wordt getoond (tekens: %1$s, regels: %2$s).</string>
     <string name="bridge_pair_again">De Mac herkent deze telefoon niet meer: sluit hem één keer aan via USB of koppel opnieuw.</string>
     <string name="bridge_send_unknown">Geen antwoord van de Mac: de tekst is misschien aangekomen. Controleer het op de Mac voordat je hem opnieuw stuurt.</string>
+    <string name="bridge_notifications_switch">Meldingen op de Mac tonen</string>
+    <string name="bridge_notifications_help">Oproepen, berichten en appmeldingen verschijnen met hun tekst op de Mac. Kies afzonderlijke apps of schakel Alle apps in. Schakel telefoonmeldingen ook in bij de instellingen van de telefoonbrug op de Mac.</string>
+    <string name="bridge_access_missing">Toegang tot meldingen is nog niet toegestaan. PhoneBox heeft die nodig om je meldingen te zien.</string>
+    <string name="bridge_access_granted">Toegang tot meldingen is toegestaan.</string>
+    <string name="bridge_access_button">Toegang tot meldingen toestaan</string>
+    <string name="bridge_restricted_help">Als de schakelaar grijs is (Android 13 en later): open App-info, tik rechtsboven op ⋮, kies Beperkte instellingen toestaan en probeer het daarna opnieuw.</string>
+    <string name="bridge_app_info_button">App-info openen</string>
+    <string name="bridge_apps_title">Apps die op de Mac worden getoond</string>
+    <string name="bridge_apps_all">Alle apps</string>
+    <string name="bridge_last_none">Nog geen melding verstuurd</string>
+    <string name="bridge_last_ok">De laatste melding is op de Mac aangekomen</string>
+    <string name="bridge_last_off">Laatste melding: de meldingsschakelaar van de Mac staat uit</string>
+    <string name="bridge_last_failed">De laatste melding kon de Mac niet bereiken; hij wordt twee minuten bewaard</string>
+    <string name="bridge_access_idle">Toegang tot meldingen is toegestaan, maar Android heeft de listener nog niet gestart. Open dit scherm opnieuw of controleer de batterij-instelling van PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: slapen met de pc</string>
     <string name="sleep_service_description">Zet het scherm van de telefoon uit wanneer de pc vergrendelt. PhoneBox leest niets op het scherm.</string>
 </resources>

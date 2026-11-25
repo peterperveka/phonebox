@@ -16,7 +16,7 @@ public sealed class NotificationBridge : IHostedService, IDisposable
     private const int MaxRemembered = 500;
     private const long PhoneFreshMs = 10 * 60_000;
 
-    private sealed record Post(string Title, string Subtitle, string Body);
+    private sealed record Post(string Title, string Subtitle, string Body, byte[]? Icon = null, string? Id = null);
 
     /// <summary>Per app: when it was last let through (inside the window), and what was held back since <see cref="HeldSince"/>.</summary>
     private sealed class Window
@@ -37,6 +37,9 @@ public sealed class NotificationBridge : IHostedService, IDisposable
     private readonly Dictionary<string, string> _seen = [];       // device|key -> hash of what was shown
     private readonly Queue<string> _seenOrder = new();
     private readonly Dictionary<string, Window> _windows = [];    // per app: the burst limiter
+    private readonly Dictionary<string, byte[]> _icons = [];      // package -> the app's icon, in memory only
+    private readonly Queue<string> _iconOrder = new();
+    private const int MaxIcons = 100;
     private readonly SemaphoreSlim _wake = new(0);
     private readonly SemaphoreSlim _drain = new(1, 1);
     private CancellationTokenSource? _stop;
@@ -65,6 +68,7 @@ public sealed class NotificationBridge : IHostedService, IDisposable
         var title = Cut(n.Title ?? "", MaxTitle);
         var text = Cut(n.Text ?? "", MaxText);
         var now = _clock();
+        var icon = RememberIcon(n);
 
         lock (_gate)
         {
@@ -98,7 +102,7 @@ public sealed class NotificationBridge : IHostedService, IDisposable
             else
             {
                 window.Times.Add(now);
-                _queue.Enqueue(Format(app, title, text, n.Category, deviceId, copied is not null, now));
+                _queue.Enqueue(Format(app, title, text, n.Category, deviceId, copied is not null, now, icon, isCall ? ReplaceId(deviceId, n.Key) : null));
                 while (_queue.Count > MaxQueued) _queue.Dequeue();
             }
         }
@@ -106,17 +110,17 @@ public sealed class NotificationBridge : IHostedService, IDisposable
         return NotifyResult.Queued;
     }
 
-    private Post Format(string app, string title, string text, string category, string? deviceId, bool codeCopied, long now)
+    private Post Format(string app, string title, string text, string category, string? deviceId, bool codeCopied, long now, byte[]? icon, string? id)
     {
         var parts = new List<string>();
         if (category == "call") parts.Add("Incoming call");
-        else if (category == "missed_call") parts.Add("Missed call");
+        else if (category == "missed_call") parts.Add(app); // the dialer's own title already says it was missed: not said twice
         else if (title.Length > 0) parts.Add(app);
         // which phone, only when more than one has been around lately
         var recent = _phones().Where(p => now - p.LastSeen <= PhoneFreshMs).ToList();
         if (recent.Count > 1 && recent.FirstOrDefault(p => p.Id == deviceId)?.Model is { Length: > 0 } model) parts.Add(model);
         if (codeCopied) parts.Add("Code copied");
-        return new Post(title.Length > 0 ? title : app, string.Join(" · ", parts), text);
+        return new Post(title.Length > 0 ? title : app, string.Join(" · ", parts), text, icon, id);
     }
 
     /// <summary>
@@ -161,6 +165,8 @@ public sealed class NotificationBridge : IHostedService, IDisposable
         {
             _queue.Clear();
             _windows.Clear();
+            _icons.Clear(); // turning the bridge off forgets the apps' icons too
+            _iconOrder.Clear();
         }
     }
 
@@ -181,12 +187,38 @@ public sealed class NotificationBridge : IHostedService, IDisposable
     {
         try
         {
-            if (!await _notifier.PostAsync(post.Title, post.Subtitle, post.Body, _stop?.Token ?? CancellationToken.None))
+            if (!await _notifier.PostAsync(post.Title, post.Subtitle, post.Body, post.Icon, post.Id, _stop?.Token ?? CancellationToken.None))
                 _log.LogWarning("a phone notification could not be shown");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _log.LogWarning("showing a phone notification failed: {Error}", ex.GetType().Name); }
     }
+
+    /// <summary>The icon this notification came with (and remembered for the app), or the one remembered earlier; none when never seen.</summary>
+    private byte[]? RememberIcon(PhoneNotification n)
+    {
+        if (string.IsNullOrEmpty(n.Package)) return n.IconPng;
+        lock (_gate)
+        {
+            if (n.IconPng is { } fresh)
+            {
+                if (!_icons.ContainsKey(n.Package)) _iconOrder.Enqueue(n.Package);
+                _icons[n.Package] = fresh;
+                while (_iconOrder.Count > MaxIcons) _icons.Remove(_iconOrder.Dequeue());
+                return fresh;
+            }
+            return _icons.GetValueOrDefault(n.Package);
+        }
+    }
+
+    private bool HoldsIcons { get { lock (_gate) return _icons.Count > 0; } }
+
+    /// <summary>How often the worker looks at the switch while it remembers icons (tests make it short).</summary>
+    internal TimeSpan IconCheck { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>The same call keeps one notification: its key (which carries the time it began) names it, so a later post replaces the first.</summary>
+    private static string ReplaceId(string? deviceId, string key) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes((deviceId ?? "") + "|" + key)))[..24].ToLowerInvariant();
 
     private static string Cut(string s, int max)
     {
@@ -200,13 +232,17 @@ public sealed class NotificationBridge : IHostedService, IDisposable
 
     public Task StartAsync(CancellationToken ct)
     {
+        if (Enabled) (_notifier as IWarmable)?.Warm(); // the PhoneBox icon is ready before the first notification
         _stop = new CancellationTokenSource();
         var token = _stop.Token;
         _worker = Task.Run(async () =>
         {
             while (!token.IsCancellationRequested)
             {
-                try { await _wake.WaitAsync(NextSummaryDelay() ?? Timeout.InfiniteTimeSpan, token); await DrainAsync(); }
+                // Nothing wakes the worker when the switch goes off (the endpoints refuse without calling in), so while icons are
+                // remembered it looks now and then: DrainAsync forgets them once the switch is off, as PRIVACY.md says.
+                var wait = NextSummaryDelay() ?? (HoldsIcons ? IconCheck : Timeout.InfiniteTimeSpan);
+                try { await _wake.WaitAsync(wait, token); await DrainAsync(); }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { _log.LogWarning("the notification worker failed: {Error}", ex.GetType().Name); }
             }

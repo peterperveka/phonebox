@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">後面還有未顯示的文字（字元：%1$s，行：%2$s）。</string>
     <string name="bridge_pair_again">Mac 已不再識別這支手機：請用 USB 連接一次，或重新配對。</string>
     <string name="bridge_send_unknown">Mac 沒有回應：文字可能已經送達。再次傳送前，請先在 Mac 上確認。</string>
+    <string name="bridge_notifications_switch">在 Mac 上顯示通知</string>
+    <string name="bridge_notifications_help">來電、訊息和應用程式通知會連同文字一起顯示在 Mac 上。逐一選擇應用程式，或開啟「所有應用程式」。也要在 Mac 的手機橋接設定中開啟手機通知。</string>
+    <string name="bridge_access_missing">尚未允許通知存取權。PhoneBox 需要它才能看到你的通知。</string>
+    <string name="bridge_access_granted">已允許通知存取權。</string>
+    <string name="bridge_access_button">允許通知存取權</string>
+    <string name="bridge_restricted_help">如果開關是灰色的（Android 13 以上）：開啟應用程式資訊，點一下右上角的 ⋮，選擇「允許受限制的設定」，然後返回再試一次。</string>
+    <string name="bridge_app_info_button">開啟應用程式資訊</string>
+    <string name="bridge_apps_title">在 Mac 上顯示的 App</string>
+    <string name="bridge_apps_all">所有應用程式</string>
+    <string name="bridge_last_none">尚未傳送任何通知</string>
+    <string name="bridge_last_ok">最近一則通知已送達 Mac</string>
+    <string name="bridge_last_off">最近一則通知：Mac 的通知開關已關閉</string>
+    <string name="bridge_last_failed">最近一則通知未能送達 Mac；它會保留兩分鐘</string>
+    <string name="bridge_access_idle">已允許通知存取權，但 Android 尚未啟動監聽服務。請再次開啟此畫面，或檢查 PhoneBox 的電池設定。</string>
     <string name="sleep_service_label">PhoneBox：隨電腦休眠</string>
     <string name="sleep_service_description">電腦鎖定時關閉手機螢幕。PhoneBox 不會讀取螢幕上的任何內容。</string>
 </resources>

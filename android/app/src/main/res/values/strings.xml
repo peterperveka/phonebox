@@ -35,6 +35,20 @@
     <string name="bridge_send_unreachable">Couldn\'t reach the Mac</string>
     <string name="bridge_send_nothing">Nothing to send: the clipboard is empty or private</string>
     <string name="bridge_send_too_large">Too long to send (the limit is 64 KiB)</string>
+    <string name="bridge_notifications_switch">Show notifications on the Mac</string>
+    <string name="bridge_notifications_help">Calls, messages and app notifications appear on the Mac with their text. Choose individual apps or turn on All apps. Turn on phone notifications in the Mac’s Phone bridge settings too.</string>
+    <string name="bridge_access_missing">Notification access is not allowed yet. PhoneBox needs it to see your notifications.</string>
+    <string name="bridge_access_idle">Notification access is allowed, but Android has not started the listener yet. Open this screen again, or check PhoneBox\'s battery setting.</string>
+    <string name="bridge_access_granted">Notification access is allowed.</string>
+    <string name="bridge_access_button">Allow notification access</string>
+    <string name="bridge_restricted_help">If the switch is greyed out (Android 13 and later): open App info, tap ⋮ at the top right, choose Allow restricted settings, then come back and try again.</string>
+    <string name="bridge_app_info_button">Open App info</string>
+    <string name="bridge_apps_title">Apps shown on the Mac</string>
+    <string name="bridge_apps_all">All apps</string>
+    <string name="bridge_last_none">No notification sent yet</string>
+    <string name="bridge_last_ok">Last notification reached the Mac</string>
+    <string name="bridge_last_off">Last notification: the Mac\'s notification switch is off</string>
+    <string name="bridge_last_failed">Last notification could not reach the Mac; it is kept for two minutes</string>
     <string name="bridge_state_unsupported">This computer can\'t share the clipboard: the phone bridge needs the PhoneBox agent on a Mac</string>
     <string name="bridge_state_stopped">Stopped by Android. Open this screen again, or restart PhoneBox, to reconnect</string>
     <!-- Phone bridge: the confirmation before Send to Mac from another app (Share, text selection), a key the Mac no longer

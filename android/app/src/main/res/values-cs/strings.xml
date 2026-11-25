@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Následuje další text, který se nezobrazuje (znaky: %1$s, řádky: %2$s).</string>
     <string name="bridge_pair_again">Mac už tento telefon nepoznává: připojte ho jednou přes USB nebo spárujte znovu.</string>
     <string name="bridge_send_unknown">Mac neodpověděl: text možná dorazil. Než ho pošlete znovu, zkontrolujte to na Macu.</string>
+    <string name="bridge_notifications_switch">Zobrazovat oznámení v Macu</string>
+    <string name="bridge_notifications_help">Na Macu se zobrazí hovory, zprávy a oznámení aplikací včetně textu. Vyberte jednotlivé aplikace nebo zapněte Všechny aplikace. Zapněte také oznámení z telefonu v nastavení telefonního mostu na Macu.</string>
+    <string name="bridge_access_missing">Přístup k oznámením zatím není povolen. PhoneBox ho potřebuje, aby viděl vaše oznámení.</string>
+    <string name="bridge_access_granted">Přístup k oznámením je povolen.</string>
+    <string name="bridge_access_button">Povolit přístup k oznámením</string>
+    <string name="bridge_restricted_help">Pokud je přepínač zašedlý (Android 13 a novější): otevřete Informace o aplikaci, klepněte na ⋮ vpravo nahoře, vyberte Povolit omezená nastavení a zkuste to znovu.</string>
+    <string name="bridge_app_info_button">Otevřít informace o aplikaci</string>
+    <string name="bridge_apps_title">Aplikace zobrazované v Macu</string>
+    <string name="bridge_apps_all">Všechny aplikace</string>
+    <string name="bridge_last_none">Zatím nebylo odesláno žádné oznámení</string>
+    <string name="bridge_last_ok">Poslední oznámení dorazilo do Macu</string>
+    <string name="bridge_last_off">Poslední oznámení: přepínač oznámení v Macu je vypnutý</string>
+    <string name="bridge_last_failed">Poslední oznámení se do Macu nedostalo; uchovává se dvě minuty</string>
+    <string name="bridge_access_idle">Přístup k oznámením je povolen, ale Android ještě nespustil naslouchání. Otevřete tuto obrazovku znovu nebo zkontrolujte nastavení baterie PhoneBoxu.</string>
     <string name="sleep_service_label">PhoneBox: uspat s počítačem</string>
     <string name="sleep_service_description">Vypne obrazovku telefonu, když se počítač zamkne. PhoneBox na obrazovce nic nečte.</string>
 </resources>

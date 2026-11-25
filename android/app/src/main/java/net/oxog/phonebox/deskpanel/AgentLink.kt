@@ -171,6 +171,26 @@ class AgentLink(private val context: Context) {
     /** Forwards a request (method + path with query) to the agent over the best available route. */
     fun request(method: String, pathAndQuery: String): Reply = request(method, pathAndQuery, null, null)
 
+    /** A notification batch and its config check must address the same paired computer. */
+    internal class NotificationTarget(val paired: Pc?, val usbPin: String?) {
+        val identity: String? get() = paired?.id ?: usbPin
+    }
+
+    internal fun notificationTarget(): NotificationTarget {
+        val paired = activePc()
+        return NotificationTarget(paired, UsbKey.pin(context)?.takeIf { paired == null || paired.id == it })
+    }
+
+    internal fun requestNotification(target: NotificationTarget, body: ByteArray?): Reply {
+        val method = if (body == null) "GET" else "POST"
+        val path = if (body == null) "/api/config" else "/api/bridge/notification"
+        val contentType = if (body == null) null else "application/json"
+        val wired = target.usbPin?.let { usb(method, path, 4000, body, contentType, pin = it) }
+        if (wired != null) return wired
+        val wireless = target.paired?.let { wifi(method, path, 4000, body, contentType, target = it) }
+        return wireless ?: Reply(503, "application/json", ByteArrayInputStream(ByteArray(0)))
+    }
+
     fun request(method: String, pathAndQuery: String, body: ByteArray?, contentType: String?): Reply {
         if (method == "POST" && pathAndQuery == "/api/bridge/clipboard")
             return sendBridgeClipboard(pathAndQuery, body, contentType)

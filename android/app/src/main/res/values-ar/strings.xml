@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">يوجد نص إضافي غير معروض (الأحرف: %1$s، الأسطر: %2$s).</string>
     <string name="bridge_pair_again">لم يعد الـ Mac يتعرّف على هذا الهاتف: صِله مرة واحدة عبر USB أو أعد الاقتران.</string>
     <string name="bridge_send_unknown">لم يصل رد من Mac: ربما وصل النص. تحقّق على Mac قبل إرساله مجددًا.</string>
+    <string name="bridge_notifications_switch">عرض الإشعارات على Mac</string>
+    <string name="bridge_notifications_help">تظهر المكالمات والرسائل وإشعارات التطبيقات على Mac مع نصها. اختر التطبيقات واحدًا واحدًا أو فعّل «كل التطبيقات». فعّل أيضًا إشعارات الهاتف في إعدادات جسر الهاتف على Mac.</string>
+    <string name="bridge_access_missing">لم يُسمح بالوصول إلى الإشعارات بعد. يحتاج PhoneBox إليه لرؤية إشعاراتك.</string>
+    <string name="bridge_access_granted">الوصول إلى الإشعارات مسموح.</string>
+    <string name="bridge_access_button">السماح بالوصول إلى الإشعارات</string>
+    <string name="bridge_restricted_help">إذا كان المفتاح باهتًا (Android 13 والأحدث): افتح معلومات التطبيق، واضغط على ⋮ في أعلى اليمين، واختر السماح بالإعدادات المقيّدة، ثم عد وحاول مرة أخرى.</string>
+    <string name="bridge_app_info_button">فتح معلومات التطبيق</string>
+    <string name="bridge_apps_title">التطبيقات المعروضة على Mac</string>
+    <string name="bridge_apps_all">كل التطبيقات</string>
+    <string name="bridge_last_none">لم يُرسل أي إشعار بعد</string>
+    <string name="bridge_last_ok">وصل آخر إشعار إلى Mac</string>
+    <string name="bridge_last_off">آخر إشعار: مفتاح الإشعارات في Mac متوقف</string>
+    <string name="bridge_last_failed">لم يصل آخر إشعار إلى Mac؛ يُحتفظ به لمدة دقيقتين</string>
+    <string name="bridge_access_idle">الوصول إلى الإشعارات مسموح، لكن Android لم يبدأ المستمع بعد. افتح هذه الشاشة مرة أخرى أو تحقق من إعداد بطارية PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: النوم مع الكمبيوتر</string>
     <string name="sleep_service_description">يطفئ شاشة الهاتف عند قفل الكمبيوتر. لا يقرأ PhoneBox أي شيء على الشاشة.</string>
 </resources>

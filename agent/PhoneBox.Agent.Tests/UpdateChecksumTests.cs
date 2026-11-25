@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using PhoneBox.Agent;
@@ -13,6 +14,7 @@ using Xunit;
 /// v0.9.9 release (metadata from the GitHub API and its SHA256SUMS-0.9.9.txt), so a change to how release.yml names
 /// the assets shows up here before it can stop the updates of installed agents.
 /// </summary>
+[Collection("Approval request expiry")] // the iOS middleware cases write the shared PhoneLastSeen timestamp
 public class UpdateChecksumTests
 {
     private const string Release099 = """
@@ -210,6 +212,7 @@ b47da3d09583268d7bacef2d4375555313bf455af8a3ab16fd4d7ee95082826e  PhoneBoxAgent-
         var dir = Path.Combine(Path.GetTempPath(), "pb-upd-retry-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         var prevAppVer = UpdateService.AppVersion;
+        var prevLastSeen = Interlocked.Read(ref ApprovalStore.PhoneLastSeen);
         try
         {
             string fakeAdb;
@@ -266,6 +269,24 @@ b47da3d09583268d7bacef2d4375555313bf455af8a3ab16fd4d7ee95082826e  PhoneBoxAgent-
             UpdateService.AppVersion = "0.0.1";
             devicesField.SetValue(adb, new[] { "SER1" });
             await svc.CheckAsync();
+
+            var gate = new RequestGate(8765, [], new UsbLink(8767, "unused"), null, cfg, _ => false, NullLogger.Instance);
+            var ios = new DefaultHttpContext();
+            ios.Request.Host = new HostString("localhost");
+            ios.Request.Headers["X-PhoneBox-App"] = "0.1.0";
+            ios.Request.Headers["X-PhoneBox-Model"] = "iOS 27.2 iPhone";
+            await gate.InvokeAsync(ios, () => Task.CompletedTask);
+            Assert.Equal("0.0.1", UpdateService.AppVersion);
+            Assert.True(svc.Status().AppUpdate);
+            var iosStatus = svc.Status(includeAndroid: !RequestGate.IsIosApp(ios.Request.Headers));
+            Assert.False(iosStatus.AppUpdate);
+            Assert.Null(iosStatus.AppVersion);
+
+            ios.Request.Headers.Remove("X-PhoneBox-Model");
+            ios.Request.Headers["X-PhoneBox-Platform"] = "ios";
+            await gate.InvokeAsync(ios, () => Task.CompletedTask);
+            Assert.Equal("0.0.1", UpdateService.AppVersion);
+
             await svc.ApplyAsync();
             Assert.NotNull(svc.Status().Error);
             Assert.True(svc.Status().AppUpdate);
@@ -305,6 +326,7 @@ b47da3d09583268d7bacef2d4375555313bf455af8a3ab16fd4d7ee95082826e  PhoneBoxAgent-
         finally
         {
             UpdateService.AppVersion = prevAppVer;
+            Interlocked.Exchange(ref ApprovalStore.PhoneLastSeen, prevLastSeen);
             try { Directory.Delete(dir, true); } catch { }
         }
     }

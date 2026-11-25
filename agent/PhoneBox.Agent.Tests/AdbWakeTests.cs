@@ -336,14 +336,8 @@ public sealed class AdbWakeTests : IDisposable
         var cfgPath = Path.Combine(_dir, "config.json");
         File.WriteAllText(cfgPath, JsonSerializer.Serialize(Settings(fake, wakeOnUnlock: false, openOnConnect: false, followComputerLock: false)));
         var adb = new AdbReverse(new ConfigStore(cfgPath), NullLogger<AdbReverse>.Instance);
-        using var cts = new CancellationTokenSource();
-        await adb.StartAsync(cts.Token);
-        try
-        {
-            for (var round = 0; round < 120 && Calls().Count(c => c == "devices") < 2; round++) await Task.Delay(100);
-            await ApplyScreenAsync(adb, "FAKE1", locked: false);
-        }
-        finally { cts.Cancel(); try { await adb.StopAsync(CancellationToken.None); } catch { } }
+        // The screen path runs independently. The polling loop would write to the fake ADB log at the same time.
+        await ApplyScreenAsync(adb, "FAKE1", locked: false);
         var calls = Calls();
         Assert.Contains("-s FAKE1 shell wm dismiss-keyguard", calls);
         Assert.DoesNotContain("-s FAKE1 shell dumpsys window", calls);

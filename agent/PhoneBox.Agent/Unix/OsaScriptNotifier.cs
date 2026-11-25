@@ -51,7 +51,7 @@ internal sealed class OsaScriptNotifier : IMacNotifier
         return args;
     }
 
-    public async Task<bool> PostAsync(string title, string subtitle, string body, CancellationToken ct)
+    public async Task<bool> PostAsync(string title, string subtitle, string body, byte[]? iconPng, string? replaceId, CancellationToken ct)
     {
         try { return await _run(BuildArguments(title, subtitle, body), ct); }
         catch { return false; }

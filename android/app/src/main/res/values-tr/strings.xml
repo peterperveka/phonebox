@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Gösterilmeyen başka metin var (karakter: %1$s, satır: %2$s).</string>
     <string name="bridge_pair_again">Mac bu telefonu artık tanımıyor: bir kez USB ile bağlayın veya yeniden eşleştirin.</string>
     <string name="bridge_send_unknown">Mac\'ten yanıt gelmedi: metin ulaşmış olabilir. Yeniden göndermeden önce Mac\'te kontrol edin.</string>
+    <string name="bridge_notifications_switch">Bildirimleri Mac\'te göster</string>
+    <string name="bridge_notifications_help">Aramalar, mesajlar ve uygulama bildirimleri metinleriyle birlikte Mac’te görünür. Uygulamaları tek tek seçin veya Tüm uygulamalar’ı açın. Mac’teki Telefon köprüsü ayarlarından telefon bildirimlerini de açın.</string>
+    <string name="bridge_access_missing">Bildirim erişimine henüz izin verilmedi. PhoneBox\'ın bildirimlerinizi görmesi için buna ihtiyacı var.</string>
+    <string name="bridge_access_granted">Bildirim erişimine izin verildi.</string>
+    <string name="bridge_access_button">Bildirim erişimine izin ver</string>
+    <string name="bridge_restricted_help">Anahtar soluksa (Android 13 ve sonrası): Uygulama bilgisi\'ni açın, sağ üstteki ⋮ simgesine dokunun, Kısıtlı ayarlara izin ver\'i seçin, sonra geri dönüp yeniden deneyin.</string>
+    <string name="bridge_app_info_button">Uygulama bilgisini aç</string>
+    <string name="bridge_apps_title">Mac\'te gösterilen uygulamalar</string>
+    <string name="bridge_apps_all">Tüm uygulamalar</string>
+    <string name="bridge_last_none">Henüz bildirim gönderilmedi</string>
+    <string name="bridge_last_ok">Son bildirim Mac\'e ulaştı</string>
+    <string name="bridge_last_off">Son bildirim: Mac\'in bildirim anahtarı kapalı</string>
+    <string name="bridge_last_failed">Son bildirim Mac\'e ulaşamadı; iki dakika saklanır</string>
+    <string name="bridge_access_idle">Bildirim erişimine izin verildi, ancak Android dinleyiciyi henüz başlatmadı. Bu ekranı tekrar açın veya PhoneBox\'ın pil ayarını kontrol edin.</string>
     <string name="sleep_service_label">PhoneBox: bilgisayarla birlikte uyu</string>
     <string name="sleep_service_description">Bilgisayar kilitlendiğinde telefon ekranını kapatır. PhoneBox ekrandaki hiçbir şeyi okumaz.</string>
 </resources>

@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Du texte suit mais n\'est pas affiché (caractères : %1$s, lignes : %2$s).</string>
     <string name="bridge_pair_again">Le Mac ne reconnaît plus ce téléphone : branchez-le une fois en USB ou jumelez-le à nouveau.</string>
     <string name="bridge_send_unknown">Pas de réponse du Mac : le texte est peut-être arrivé. Vérifiez sur le Mac avant de le renvoyer.</string>
+    <string name="bridge_notifications_switch">Afficher les notifications sur le Mac</string>
+    <string name="bridge_notifications_help">Les appels, les messages et les notifications d’applications s’affichent sur le Mac avec leur texte. Sélectionnez les applications une par une ou activez Toutes les applications. Activez aussi les notifications du téléphone dans les réglages du pont sur le Mac.</string>
+    <string name="bridge_access_missing">L\'accès aux notifications n\'est pas encore autorisé. PhoneBox en a besoin pour voir vos notifications.</string>
+    <string name="bridge_access_granted">L\'accès aux notifications est autorisé.</string>
+    <string name="bridge_access_button">Autoriser l\'accès aux notifications</string>
+    <string name="bridge_restricted_help">Si l\'interrupteur est grisé (Android 13 et versions ultérieures) : ouvrez Infos sur l\'appli, touchez ⋮ en haut à droite, choisissez Autoriser les paramètres restreints, puis revenez et réessayez.</string>
+    <string name="bridge_app_info_button">Ouvrir Infos sur l\'appli</string>
+    <string name="bridge_apps_title">Applis affichées sur le Mac</string>
+    <string name="bridge_apps_all">Toutes les applis</string>
+    <string name="bridge_last_none">Aucune notification envoyée pour l\'instant</string>
+    <string name="bridge_last_ok">La dernière notification a atteint le Mac</string>
+    <string name="bridge_last_off">Dernière notification : l\'interrupteur des notifications du Mac est désactivé</string>
+    <string name="bridge_last_failed">La dernière notification n\'a pas atteint le Mac ; elle est conservée deux minutes</string>
+    <string name="bridge_access_idle">L\'accès aux notifications est autorisé, mais Android n\'a pas encore démarré l\'écouteur. Rouvrez cet écran ou vérifiez le réglage de batterie de PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox : veille avec le PC</string>
     <string name="sleep_service_description">Éteint l\'écran du téléphone quand le PC se verrouille. PhoneBox ne lit rien à l\'écran.</string>
 </resources>

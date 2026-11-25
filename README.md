@@ -77,7 +77,7 @@ works without either. Release agents include .NET, so you do not need to install
 
 ### 1. Install the desktop agent
 
-**Windows 10/11 x64** — paste into a normal PowerShell window:
+**Windows 10/11 x64 or Windows 11 ARM64** — paste into a normal PowerShell window:
 
 ```powershell
 irm https://raw.githubusercontent.com/ersinkoc/phonebox/main/setup.ps1 | iex
@@ -108,7 +108,8 @@ The [installation guide](docs/SETUP.md) covers options, dependencies, install pa
 | Wakes and opens the panel on connection; supports app updates over adb. | No adb or developer options needed; install app updates manually unless you later configure USB. |
 
 The phone app is not in any app store; it comes only from this repository's releases. It runs on Android 5.0 and
-newer; there is no iOS version.
+newer. An experimental iOS companion (SwiftUI, built from source with Xcode) is documented in
+[ios/PhoneBox](ios/PhoneBox/README.md); it has no releases and does not implement the Android-only panel features.
 
 For automatic USB/Wi-Fi fallback, enable Wi-Fi and connect the phone over USB once.
 [Connection details and Tailscale setup →](docs/SETUP.md#wi-fi--tailscale)
@@ -162,8 +163,8 @@ Change fonts, size, spacing, corners and surfaces globally or for one page or wi
 | Agent interface | Tray icon + browser settings | Browser settings | Browser settings |
 
 Widgets depend on the host's hardware, installed tools and permissions. Advanced Control Deck features have
-[their own platform requirements](docs/CONTROL-DECK.md). Windows ARM and musl Linux (such as Alpine) do not have
-release builds. See the [full compatibility table](docs/SETUP.md#what-works-where).
+[their own platform requirements](docs/CONTROL-DECK.md). Windows on ARM requires Windows 11.
+Musl Linux (such as Alpine) has no release build. See the [full compatibility table](docs/SETUP.md#what-works-where).
 
 ## Documentation
 
@@ -207,7 +208,9 @@ Read the [security details](docs/GUIDE.md#security--privacy). To report a vulner
 
 ## Development
 
-The agent uses **.NET 10**; the Android app uses **Kotlin and a WebView** with plain JavaScript widgets.
+The agent uses **.NET 10**; the Android app uses **Kotlin and a WebView** with plain JavaScript widgets. The
+optional iOS app is SwiftUI + `WKWebView` and reuses the Android panel assets; see
+[ios/PhoneBox/README.md](ios/PhoneBox/README.md).
 For Android builds, install **JDK 17** and **Android SDK Platform 35** (the SDK the app is built with; the app itself
 runs on Android 5.0, API 21, and later).
 Preview the panel and editor from source with Python 3, using simulated data:
@@ -227,7 +230,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 
 - **Windows agent:** SignPath Foundation accepted the project and a test-signed build passed; releases stay unsigned
   until the Foundation's release certificate is issued.
-  The intended signing target is `PhoneBoxAgent.exe` in the `win-x64` release zip, built by the
+  The intended signing target is `PhoneBoxAgent.exe` in the `win-x64` and `win-arm64` release zips, built by the
   [release workflow](.github/workflows/release.yml). Every signing request requires manual approval.
   Bundled runtime and library notices are in [THIRD-PARTY-NOTICES.txt](agent/PhoneBox.Agent/THIRD-PARTY-NOTICES.txt).
 - **Android app:** release APKs use the project's own signing key, independently of SignPath.

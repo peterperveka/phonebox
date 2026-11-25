@@ -195,22 +195,27 @@ class ClipboardService : Service() {
         fun sync(context: Context) {
             val app = context.applicationContext
             val intent = Intent(app, ClipboardService::class.java)
-            val on = BridgePrefs.clipboardEnabled(app)
-            when (BridgeClip.syncAction(on, BridgePrefs.live(app))) {
+            val clipOn = BridgePrefs.clipboardEnabled(app)
+            val anyOn = clipOn || BridgePrefs.notificationsEnabled(app)
+            when (BridgeClip.syncAction(anyOn, BridgePrefs.live(app))) {
                 // for everyone who never turned the bridge on, and after the clean-up, "off" is nothing at all: no component is
                 // looked at and no service is stopped, on any of the panel's resumes
                 BridgeClip.SyncAction.NOTHING -> return
                 BridgeClip.SyncAction.CLEAN_UP -> {
                     app.stopService(intent) // nothing happens when it is not running
-                    BridgeEntryPoints.setEnabled(app, false)
+                    BridgeEntryPoints.update(app)
                     BridgePrefs.setLive(app, false)
                     return
                 }
                 BridgeClip.SyncAction.START -> {
-                    // "Send to Mac" shows in other apps' menus only while the bridge is on (a no-op when nothing changes)
-                    BridgeEntryPoints.setEnabled(app, true)
+                    // "Send to Mac" and the notification-access entry show only while their switches are on (no-op when unchanged)
+                    BridgeEntryPoints.update(app)
                     if (!BridgePrefs.live(app)) BridgePrefs.setLive(app, true)
                 }
+            }
+            if (!clipOn) {
+                app.stopService(intent)
+                return
             }
             try {
                 if (Build.VERSION.SDK_INT >= 26) app.startForegroundService(intent) else app.startService(intent)

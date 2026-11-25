@@ -13,7 +13,7 @@ internal static class BridgeApi
 {
     /// <summary>The largest request the clipboard endpoint reads (the text limit is lower; JSON escapes make the body bigger).</summary>
     public const int MaxRequestBytes = 512 * 1024; // 64 KiB of text can grow six times once JSON escapes it (each character as a six-character escape)
-    /// <summary>The largest notification request: a title and text are cut to 2.2 KB anyway, the rest is JSON.</summary>
+    /// <summary>The largest notification request: a title and text are cut to 2.2 KB anyway (up to about 13 KB once JSON-escaped), and the app icon is at most about 43 KB of base64.</summary>
     public const int MaxNotificationBytes = 64 * 1024;
     public const string RequestTooLarge = "request too large";
     /// <summary>An SSE comment, sent now and then so a dead connection is noticed.</summary>
@@ -130,7 +130,7 @@ internal static class BridgeApi
                 : null);
 
     /// <summary>
-    /// Reads a phone notification: <c>{"key","app","package","title","text","category","time"}</c>. A body that is not one (no
+    /// Reads a phone notification: <c>{"key","app","package","title","text","category","time"}</c> and an optional <c>"icon"</c> (base64 of a small PNG, see <see cref="NotificationIcon"/>). A body that is not one (no
     /// text key, or neither a title nor a text) gives (null, null); the caller answers 400.
     /// </summary>
     public static Task<(PhoneNotification? Notification, string? Error)> ReadNotificationBody(HttpRequest req) =>
@@ -144,7 +144,7 @@ internal static class BridgeApi
             if (string.IsNullOrEmpty(key) || (title.Length == 0 && text.Length == 0)) return null;
             var time = root.TryGetProperty("time", out var tv) && tv.ValueKind == JsonValueKind.Number && tv.TryGetInt64(out var t) ? t : 0;
             var category = Str("category") is { Length: > 0 and <= 32 } c ? c : "message";
-            return new PhoneNotification(key.Length > 128 ? key[..128] : key, Str("app") ?? "", Str("package") ?? "", title, text, category, time);
+            return new PhoneNotification(key.Length > 128 ? key[..128] : key, Str("app") ?? "", Str("package") ?? "", title, text, category, time, NotificationIcon.TryDecode(Str("icon")));
         });
 
     public static IResult PostNotification(NotificationBridge? bridge, PhoneNotification? notification, string? deviceId)

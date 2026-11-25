@@ -2,7 +2,17 @@
 
 ## Unreleased
 
+## 0.9.30 — 2026-11-25
+
+- Windows 11 on ARM: native ARM64 agent ZIP and architecture-aware PowerShell setup (#602).
+
 **Widgets**
+- **Stocks**: a configurable stock watchlist and intraday charts widget (#595).
+- **East Money stock forum**: a stock forum widget (#594).
+- **Water intake**: a local water intake tracker widget with reminders (#592).
+- Charts: add a point only for a new sample from the PC (#564, [WellyngtonSantos](https://github.com/WellyngtonSantos)), keep chart lines visible with Windows hardware sensor setup help (#590), and show when a chart requests unknown metrics (#591).
+- Synced lyrics: drop bracketed extras and extra artists when searching LRCLIB (#569, [haop2922-ai](https://github.com/haop2922-ai)).
+- Device batteries: keep connected Windows Bluetooth audio batteries visible (#588) and fix battery recovery (#581).
 - Discord on Windows: **Choose on PC** (screen share) brings Discord's window to the front. Discord draws its picker
   inside its own window, so with Discord minimized, behind other windows or in the tray the button seemed to do
   nothing. With more than one Discord build running (stable, PTB, Canary), the one PhoneBox is connected to comes
@@ -51,6 +61,13 @@
   [avery02072003-cmyk](https://github.com/avery02072003-cmyk)).
 
 **Agent**
+- **Phone bridge** (macOS, off by default): enable two-way plain-text clipboard sharing over USB or paired
+  Wi-Fi in **Settings › Phone bridge** (#528). The Mac can receive phone notifications and optionally copy
+  one-time login codes (#530). Its native notifier shows the PhoneBox icon, can attach a phone app icon when
+  supplied, and falls back to `osascript` (#534, [Vasilispapg](https://github.com/Vasilispapg)).
+- **WorkBuddy** (off by default): opt-in WorkBuddy AI sessions and phone permission approvals (#596).
+- **Claude Code extra accounts**: support multiple Claude Code accounts with a `claude@<label>` quota card each, sessions from each account, and per-account hook installation listed before writing (#538, #567, #568, #570, [egin10](https://github.com/egin10)).
+- **Rules**: a new **Show the night screen** (`night`) rule action shows the night screen while a rule is active and returns when it ends (#330, #597, [Nero-Dark](https://github.com/Nero-Dark)).
 - Linux on GNOME Wayland (Ubuntu's default session): shortcuts that type text or press keys work with `ydotool`
   installed; GNOME takes neither `wtype` nor `xdotool`. A key press or typing that fails now says so instead of
   reporting success, and `xdotool` is used on Wayland only when neither of the others is installed, since there it
@@ -103,6 +120,10 @@
   [freefakesmile](https://github.com/freefakesmile)).
 
 **Panel**
+- Settings › Display › **Sound when a permission prompt appears**, off by default: plays two short beeps at the finish-sound volume when a new permission prompt arrives, staying quiet on the night screen (#497, #598, [sszxt](https://github.com/sszxt)).
+- Settings › Display › **Standby** (`display.standby = off | power | data`, off by default): opt-in power standby mode (#430).
+- Live previews in Settings now match the connected device's WebView dimensions (#582), and USB, quota, and timer settings are improved (#581).
+- Translations: translated UI text that was hard-coded in English (#571, [dancho12](https://github.com/dancho12)), rewrote machine-translated Russian strings (#572, [dancho12](https://github.com/dancho12)), and fixed pairing dialog expiry and spacing strings in 7 locales (#603, [nunesjr](https://github.com/nunesjr)).
 - Page bar: with many pages on a narrow phone, only the current page keeps its name, so the others are not cut to one
   letter. It happens only when a name would be cut, so tablets, monitors and the side bar keep every name (#553,
   [avery02072003-cmyk](https://github.com/avery02072003-cmyk)).
@@ -133,6 +154,7 @@
   a wallpaper is set (#468, #471, [lucaskaiut](https://github.com/lucaskaiut)).
 
 **Android app**
+- **Phone bridge** (off by default): clipboard sharing on the phone via **Send to Mac** in the text-selection menu and Share sheet (with preview confirmation), a Quick Settings tile, and a notification button (#529, [Vasilispapg](https://github.com/Vasilispapg)), plus opt-in phone notification forwarding to the Mac with per-app selection, Samsung ringing-call and contact-name support, app icons and an **All apps** switch, and a clearer Phone bridge screen with the app list inline (#531, #535, #536, #537, [Vasilispapg](https://github.com/Vasilispapg)).
 - Pairing without a cable: when the browser can't hand the pairing link to the app, the pairing page now says what to
   do (install the app first, or try the camera, Chrome or USB) instead of opening the download page as if pairing had
   worked (#175, #552, [haop2922-ai](https://github.com/haop2922-ai)).
@@ -140,7 +162,13 @@
   for every request. On Android 6 each one held system resources until the app was stopped, which may be behind the
   crashes after some idle time in #389 (#508, [wahackr](https://github.com/wahackr)).
 
+**iOS app**
+- Experimental SwiftUI companion that reuses the PhoneBox panel and pairs with the desktop agent over
+  Wi-Fi or Tailscale (#599, [Hal33mm5](https://github.com/Hal33mm5)), with an automatic `usbmuxd` USB bridge (#600, [Hal33mm5](https://github.com/Hal33mm5)) and real-device fixes keeping iOS app versions out of Android APK update prompts and moving the options button out of widget headers (#604, #605).
+
 **Setup**
+- Windows ARM64: native `win-arm64` agent builds, `setup.ps1` support, and self-update (#602, #606).
+- Standalone setup now honors the ignored-device list (#587).
 - Windows: each release also has an installer, `PhoneBox-<version>-win-x64-setup.exe`. It installs for the current
   user (no administrator) into the folder the agent updates itself in, with a Start Menu shortcut and an optional
   *Start PhoneBox with Windows*, and keeps the settings on uninstall. Like the agent for now, it is not code-signed,

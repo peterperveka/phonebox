@@ -36,6 +36,20 @@
     <string name="bridge_confirm_more">Há mais texto que não é exibido (caracteres: %1$s, linhas: %2$s).</string>
     <string name="bridge_pair_again">O Mac não reconhece mais este celular: conecte-o uma vez por USB ou pareie de novo.</string>
     <string name="bridge_send_unknown">Sem resposta do Mac: o texto pode ter chegado. Confira no Mac antes de enviá-lo de novo.</string>
+    <string name="bridge_notifications_switch">Mostrar notificações no Mac</string>
+    <string name="bridge_notifications_help">Chamadas, mensagens e notificações de aplicativos aparecem no Mac com o texto. Escolha aplicativos individuais ou ative Todos os aplicativos. Ative também as notificações do telefone nas configurações da ponte no Mac.</string>
+    <string name="bridge_access_missing">O acesso às notificações ainda não foi permitido. O PhoneBox precisa dele para ver suas notificações.</string>
+    <string name="bridge_access_granted">O acesso às notificações está permitido.</string>
+    <string name="bridge_access_button">Permitir acesso às notificações</string>
+    <string name="bridge_restricted_help">Se o botão estiver esmaecido (Android 13 e posterior): abra Informações do app, toque em ⋮ no canto superior direito, escolha Permitir configurações restritas e tente de novo.</string>
+    <string name="bridge_app_info_button">Abrir informações do app</string>
+    <string name="bridge_apps_title">Apps mostrados no Mac</string>
+    <string name="bridge_apps_all">Todos os apps</string>
+    <string name="bridge_last_none">Nenhuma notificação enviada ainda</string>
+    <string name="bridge_last_ok">A última notificação chegou ao Mac</string>
+    <string name="bridge_last_off">Última notificação: o botão de notificações do Mac está desativado</string>
+    <string name="bridge_last_failed">A última notificação não chegou ao Mac; ela é mantida por dois minutos</string>
+    <string name="bridge_access_idle">O acesso às notificações está permitido, mas o Android ainda não iniciou o receptor. Abra esta tela de novo ou confira a configuração de bateria do PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: dormir com o PC</string>
     <string name="sleep_service_description">Desliga a tela do celular quando o PC é bloqueado. O PhoneBox não lê nada na tela.</string>
 </resources>

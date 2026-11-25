@@ -81,14 +81,14 @@ public sealed class OsaScriptNotifierTests
     {
         IReadOnlyList<string>? seen = null;
         var notifier = new OsaScriptNotifier((args, _) => { seen = args; return Task.FromResult(true); });
-        Assert.True(await notifier.PostAsync("t", "s", "b", CancellationToken.None));
+        Assert.True(await notifier.PostAsync("t", "s", "b", null, null, CancellationToken.None));
         Assert.Equal(OsaScriptNotifier.BuildArguments("t", "s", "b"), seen);
     }
 
     [Fact]
     public async Task PostAsyncIsFalseWhenTheRunnerFailsOrThrows()
     {
-        Assert.False(await new OsaScriptNotifier((_, _) => Task.FromResult(false)).PostAsync("t", "s", "b", CancellationToken.None));
-        Assert.False(await new OsaScriptNotifier((_, _) => throw new InvalidOperationException("boom")).PostAsync("t", "s", "b", CancellationToken.None));
+        Assert.False(await new OsaScriptNotifier((_, _) => Task.FromResult(false)).PostAsync("t", "s", "b", null, null, CancellationToken.None));
+        Assert.False(await new OsaScriptNotifier((_, _) => throw new InvalidOperationException("boom")).PostAsync("t", "s", "b", null, null, CancellationToken.None));
     }
 }

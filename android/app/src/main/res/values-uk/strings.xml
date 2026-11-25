@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Далі є текст, який не показано (символів: %1$s, рядків: %2$s).</string>
     <string name="bridge_pair_again">Mac більше не впізнає цей телефон: підключіть його один раз через USB або створіть пару знову.</string>
     <string name="bridge_send_unknown">Немає відповіді від Mac: можливо, текст дійшов. Перевірте на Mac, перш ніж надсилати знову.</string>
+    <string name="bridge_notifications_switch">Показувати сповіщення на Mac</string>
+    <string name="bridge_notifications_help">Виклики, повідомлення та сповіщення застосунків відображаються на Mac разом із текстом. Виберіть окремі застосунки або ввімкніть «Усі застосунки». Увімкніть сповіщення з телефона також у налаштуваннях мосту на Mac.</string>
+    <string name="bridge_access_missing">Доступ до сповіщень ще не дозволено. PhoneBox потрібен він, щоб бачити ваші сповіщення.</string>
+    <string name="bridge_access_granted">Доступ до сповіщень дозволено.</string>
+    <string name="bridge_access_button">Дозволити доступ до сповіщень</string>
+    <string name="bridge_restricted_help">Якщо перемикач неактивний (Android 13 і новіші): відкрийте «Про застосунок», торкніться ⋮ угорі праворуч, виберіть «Дозволити обмежені налаштування», потім поверніться й повторіть.</string>
+    <string name="bridge_app_info_button">Відкрити «Про застосунок»</string>
+    <string name="bridge_apps_title">Застосунки, що показуються на Mac</string>
+    <string name="bridge_apps_all">Усі застосунки</string>
+    <string name="bridge_last_none">Сповіщень ще не надсилалося</string>
+    <string name="bridge_last_ok">Останнє сповіщення дійшло до Mac</string>
+    <string name="bridge_last_off">Останнє сповіщення: перемикач сповіщень на Mac вимкнено</string>
+    <string name="bridge_last_failed">Останнє сповіщення не дійшло до Mac; воно зберігається дві хвилини</string>
+    <string name="bridge_access_idle">Доступ до сповіщень дозволено, але Android ще не запустив слухач. Відкрийте цей екран знову або перевірте налаштування батареї PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: сон разом із ПК</string>
     <string name="sleep_service_description">Вимикає екран телефона, коли ПК блокується. PhoneBox нічого не читає з екрана.</string>
 </resources>

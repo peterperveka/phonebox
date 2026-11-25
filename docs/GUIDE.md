@@ -342,15 +342,33 @@ Share what you copy between the Mac and the phone. It starts with the clipboard.
   **Unrestricted** (Settings › Apps › PhoneBox › Battery), or the system may stop the service.
 - **Notifications on the Mac:** turn on **Settings › Phone bridge › Show phone notifications on this Mac**. Calls (who is
   calling), messages and the apps you allow on the phone then appear as macOS notifications, with the text of the
-  message. They carry Script Editor's icon, which is how macOS labels a notification from a program that has no app of
-  its own. A banner stays for about five seconds and then waits in **Notification Center** (click the clock). **Send a
+  message. They carry the PhoneBox icon, with the phone app's own icon (Facebook, Messages) as the picture. The first time, the agent builds
+  a small program for that on your Mac (about 20 seconds, needs Xcode or the command line tools, nothing is downloaded) and
+  macOS asks whether PhoneBox may show notifications: allow it. Until then, or if it cannot be built, the notifications carry
+  Script Editor's icon, which is how macOS labels a notification from a program that has no app of its own. A banner stays for about five seconds and then waits in **Notification Center** (click the clock). **Send a
   test notification** shows one right away; save the settings first.
+- **Notifications from the phone:** on the Phone bridge screen turn on **Show notifications on the Mac**, then tap **Allow
+  notification access** and switch PhoneBox on in the list (on Android 13 and later the switch is greyed out until you
+  open **App info**, tap ⋮ and choose **Allow restricted settings**; the screen says so). The **Apps shown on the Mac** card below lists
+  your apps with a switch each and a search box: only the ones you turn on are sent. At first only the phone's own dialer and messaging app are on.
+  **All apps** sends every app instead (banking and other private notifications too), so it is off until you turn it
+  on; the list is hidden while it is on. The Mac shows each app's icon as the notification's picture.
+  The Mac's switch (Settings › Phone bridge › Show phone notifications) must be on too; the screen shows whether the
+  last notification reached the Mac.
 - **Login codes:** with **Copy one-time codes from messages** on as well, a code in a message ("Your verification code is
   482913", also in Greek) is put on the Mac's clipboard when the notification arrives, and the notification says "Code
   copied", so you can paste it into the site at once. It copies only when it finds exactly one code next to a word like
   code, OTP, PIN or κωδικός; with two numbers, or none, it copies nothing. It knows English and Greek words only, so a
   code in a message in another language is shown but not copied. It does not send the code on to your phones.
-- Calls show who is calling; the voice stays on the phone. Answer there.
+- **Calls and delivery:** a call is sent once, when it starts ringing, and is not repeated when you answer or hang up; a
+  missed call is sent as "Missed call". Calls show who is calling; the voice stays on the phone. Answer there. If the Mac is asleep or away, notifications are kept for two minutes and sent when it
+  is back, then dropped (a login code older than that is no use). On a Samsung phone a ringing call is posted by the in-call
+  app rather than the dialer, so it is sent whenever the default dialer is on your app list (other apps' calls, such as
+  WhatsApp, follow your list like any notification); an outgoing call looks the same there and is sent too. Opening the
+  Phone bridge screen while notifications are enabled can prompt once for **Contacts**. If Android shows only the
+  number and you allow access, the caller's name is shown on the Mac instead of the
+  number (one lookup of that number, nothing is read in bulk or kept), and a name that arrives a moment later replaces
+  the first notification.
 - The text goes only to your own paired phones over the PhoneBox link (USB or paired Wi-Fi / Tailscale), with the
   phone's key. Enable the bridge only on a computer where users and software with access to the local agent API are
   trusted. The text is kept in memory and never stored or logged by PhoneBox (macOS itself keeps a notification in

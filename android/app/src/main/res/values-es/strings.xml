@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Sigue más texto que no se muestra (caracteres: %1$s, líneas: %2$s).</string>
     <string name="bridge_pair_again">El Mac ya no reconoce este teléfono: conéctalo una vez por USB o vuelve a emparejarlo.</string>
     <string name="bridge_send_unknown">Sin respuesta del Mac: puede que el texto haya llegado. Compruébalo en el Mac antes de enviarlo de nuevo.</string>
+    <string name="bridge_notifications_switch">Mostrar notificaciones en el Mac</string>
+    <string name="bridge_notifications_help">Las llamadas, los mensajes y las notificaciones de aplicaciones aparecen en el Mac con su texto. Elige aplicaciones por separado o activa Todas las aplicaciones. Activa también las notificaciones del teléfono en los ajustes del puente del Mac.</string>
+    <string name="bridge_access_missing">Aún no se permite el acceso a las notificaciones. PhoneBox lo necesita para ver tus notificaciones.</string>
+    <string name="bridge_access_granted">Se permite el acceso a las notificaciones.</string>
+    <string name="bridge_access_button">Permitir el acceso a las notificaciones</string>
+    <string name="bridge_restricted_help">Si el interruptor aparece atenuado (Android 13 y posteriores): abre Información de la app, toca ⋮ arriba a la derecha, elige Permitir ajustes restringidos y vuelve a intentarlo.</string>
+    <string name="bridge_app_info_button">Abrir información de la app</string>
+    <string name="bridge_apps_title">Apps que se muestran en el Mac</string>
+    <string name="bridge_apps_all">Todas las apps</string>
+    <string name="bridge_last_none">Aún no se ha enviado ninguna notificación</string>
+    <string name="bridge_last_ok">La última notificación llegó al Mac</string>
+    <string name="bridge_last_off">Última notificación: el interruptor de notificaciones del Mac está desactivado</string>
+    <string name="bridge_last_failed">La última notificación no llegó al Mac; se conserva dos minutos</string>
+    <string name="bridge_access_idle">Se permite el acceso a las notificaciones, pero Android aún no ha iniciado el receptor. Abre esta pantalla de nuevo o revisa el ajuste de batería de PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: dormir con el PC</string>
     <string name="sleep_service_description">Apaga la pantalla del teléfono cuando el PC se bloquea. PhoneBox no lee nada de la pantalla.</string>
 </resources>

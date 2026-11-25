@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the views of a row in the apps screen (BridgeAppsCard builds them in code) -->
+    <item name="bridge_app_icon" type="id" />
+    <item name="bridge_app_label" type="id" />
+    <item name="bridge_app_switch" type="id" />
+</resources>

@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">表示されていない続きのテキストがあります（文字数: %1$s、行数: %2$s）。</string>
     <string name="bridge_pair_again">Macがこのスマートフォンを認識しなくなりました。一度USBで接続するか、もう一度ペアリングしてください。</string>
     <string name="bridge_send_unknown">Mac から応答がありません。テキストは届いている可能性があります。もう一度送る前に Mac で確認してください。</string>
+    <string name="bridge_notifications_switch">Mac に通知を表示</string>
+    <string name="bridge_notifications_help">通話、メッセージ、アプリの通知が本文とともにMacに表示されます。アプリを個別に選ぶか、「すべてのアプリ」をオンにしてください。Macの電話ブリッジ設定でも電話の通知をオンにしてください。</string>
+    <string name="bridge_access_missing">通知へのアクセスがまだ許可されていません。PhoneBox が通知を見るために必要です。</string>
+    <string name="bridge_access_granted">通知へのアクセスは許可されています。</string>
+    <string name="bridge_access_button">通知へのアクセスを許可</string>
+    <string name="bridge_restricted_help">スイッチがグレーになっている場合（Android 13 以降）：アプリ情報を開き、右上の ⋮ をタップして「制限付き設定を許可」を選び、戻ってもう一度試してください。</string>
+    <string name="bridge_app_info_button">アプリ情報を開く</string>
+    <string name="bridge_apps_title">Mac に表示するアプリ</string>
+    <string name="bridge_apps_all">すべてのアプリ</string>
+    <string name="bridge_last_none">まだ通知を送信していません</string>
+    <string name="bridge_last_ok">直近の通知は Mac に届きました</string>
+    <string name="bridge_last_off">直近の通知：Mac の通知スイッチがオフです</string>
+    <string name="bridge_last_failed">直近の通知は Mac に届きませんでした。2 分間保持されます</string>
+    <string name="bridge_access_idle">通知へのアクセスは許可されていますが、Android がまだリスナーを起動していません。この画面をもう一度開くか、PhoneBox のバッテリー設定を確認してください。</string>
     <string name="sleep_service_label">PhoneBox: PCと一緒にスリープ</string>
     <string name="sleep_service_description">PCがロックされたときにスマートフォンの画面をオフにします。PhoneBoxは画面の内容を読み取りません。</string>
 </resources>

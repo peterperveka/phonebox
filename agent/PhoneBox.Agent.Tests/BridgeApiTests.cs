@@ -23,7 +23,7 @@ public sealed class BridgeApiTests : IDisposable
 
     private sealed class RecordingNotifier(List<(string, string, string)> shown) : IMacNotifier
     {
-        public Task<bool> PostAsync(string title, string subtitle, string body, CancellationToken ct)
+        public Task<bool> PostAsync(string title, string subtitle, string body, byte[]? iconPng, string? replaceId, CancellationToken ct)
         {
             shown.Add((title, subtitle, body));
             return Task.FromResult(true);

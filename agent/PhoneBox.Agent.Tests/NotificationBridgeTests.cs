@@ -9,13 +9,19 @@ using Xunit;
 /// </summary>
 public sealed class NotificationBridgeTests : IDisposable
 {
-    private sealed class FakeNotifier : IMacNotifier
+    private sealed class FakeNotifier : IMacNotifier, IWarmable
     {
+        public int Warmed;
+        public void Warm() => Warmed++;
         public readonly List<(string Title, string Subtitle, string Body)> Posts = [];
+        public readonly List<byte[]?> Icons = [];
+        public readonly List<string?> Ids = [];
         public bool Ok = true;
-        public Task<bool> PostAsync(string title, string subtitle, string body, CancellationToken ct)
+        public Task<bool> PostAsync(string title, string subtitle, string body, byte[]? iconPng, string? replaceId, CancellationToken ct)
         {
-            Posts.Add((title, subtitle, body));
+            Icons.Add(iconPng);
+            Ids.Add(replaceId);
+            Posts.Add((title, subtitle, body)); // last: tests wait on Posts.Count and then read Icons/Ids
             return Task.FromResult(Ok);
         }
     }
@@ -68,6 +74,111 @@ public sealed class NotificationBridgeTests : IDisposable
         return result;
     }
 
+    [Fact]
+    public async Task StartingWithTheSwitchOnWarmsTheNotifierUpAndWithItOffDoesNot()
+    {
+        await _bridge.StartAsync(CancellationToken.None);
+        Assert.Equal(1, _notifier.Warmed);
+        await _bridge.StopAsync(CancellationToken.None);
+        SetBridge(notifications: false);
+        var off = new NotificationBridge(_notifier, _store, _clipboard, () => _now, _log);
+        await off.StartAsync(CancellationToken.None);
+        Assert.Equal(1, _notifier.Warmed);
+        await off.StopAsync(CancellationToken.None);
+    }
+
+    // ---- the posting app's icon ----
+
+    private static byte[] Png(int w = 96, int h = 96, int extra = 0)
+    {
+        var png = new byte[33 + extra];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, (byte)'I', (byte)'H', (byte)'D', (byte)'R' }.CopyTo(png, 0);
+        png[16] = (byte)(w >> 24); png[17] = (byte)(w >> 16); png[18] = (byte)(w >> 8); png[19] = (byte)w;
+        png[20] = (byte)(h >> 24); png[21] = (byte)(h >> 16); png[22] = (byte)(h >> 8); png[23] = (byte)h;
+        return png;
+    }
+
+    [Fact]
+    public async Task AnAppsIconTravelsWithItsNotification()
+    {
+        var icon = Png();
+        await Send(N("k1") with { IconPng = icon });
+        Assert.Same(icon, Assert.Single(_notifier.Icons));
+    }
+
+    [Fact]
+    public async Task AnIconSeenOnceIsUsedForTheAppsLaterNotificationsThatCarryNone()
+    {
+        var icon = Png();
+        await Send(N("k1", "Facebook") with { IconPng = icon });
+        await Send(N("k2", "Facebook", text: "second"));
+        Assert.Equal([icon, icon], _notifier.Icons);
+    }
+
+    [Fact]
+    public async Task AnIconIsOnlyUsedForItsOwnApp()
+    {
+        await Send(N("k1", "Facebook") with { IconPng = Png() });
+        await Send(N("k2", "Messages"));
+        Assert.Null(_notifier.Icons[1]);
+    }
+
+    [Fact]
+    public async Task ANewerIconReplacesTheOldOne()
+    {
+        var old = Png(); var fresh = Png(extra: 4);
+        await Send(N("k1", "Facebook") with { IconPng = old });
+        await Send(N("k2", "Facebook", text: "again") with { IconPng = fresh });
+        await Send(N("k3", "Facebook", text: "third"));
+        Assert.Same(fresh, _notifier.Icons[2]);
+    }
+
+    [Fact]
+    public async Task TurningTheSwitchOffForgetsTheIcons()
+    {
+        await Send(N("k1", "Facebook") with { IconPng = Png() });
+        SetBridge(notifications: false);
+        await _bridge.DrainAsync();                    // the switch is looked at here: what is held is dropped
+        SetBridge(notifications: true);
+        await Send(N("k2", "Facebook", text: "after"));
+        Assert.Null(_notifier.Icons[^1]);
+    }
+
+    [Fact]
+    public async Task TheRunningWorkerForgetsTheIconsWhenTheSwitchGoesOffWithNoNotificationToWakeIt()
+    {
+        var bridge = new NotificationBridge(_notifier, _store, _clipboard, () => _now, _log, () => _phones) { IconCheck = TimeSpan.FromMilliseconds(20) };
+        await bridge.StartAsync(CancellationToken.None);
+        try
+        {
+            bridge.Receive(N("k1", "Facebook") with { IconPng = Png() }, "phoneA");
+            await WaitFor(() => _notifier.Posts.Count == 1);
+            SetBridge(notifications: false);              // nothing reaches the bridge while it is off
+            await Task.Delay(500);
+            SetBridge(notifications: true);
+            bridge.Receive(N("k2", "Facebook", text: "after"), "phoneA");
+            await WaitFor(() => _notifier.Posts.Count == 2);
+            Assert.Null(_notifier.Icons[^1]);
+        }
+        finally { await bridge.StopAsync(CancellationToken.None); bridge.Dispose(); }
+    }
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        for (var i = 0; i < 200 && !condition(); i++) await Task.Delay(25);
+        Assert.True(condition());
+    }
+
+    [Fact]
+    public async Task OnlyTheLastHundredAppsKeepTheirIcons()
+    {
+        for (var i = 0; i < 101; i++) await Send(N("k" + i, "App" + i) with { IconPng = Png() });
+        await Send(N("again0", "App0", text: "later"));      // the oldest was forgotten
+        await Send(N("again100", "App100", text: "later"));  // the newest was kept
+        Assert.Null(_notifier.Icons[^2]);
+        Assert.NotNull(_notifier.Icons[^1]);
+    }
+
     // ---- the switch ----
 
     [Fact]
@@ -110,10 +221,37 @@ public sealed class NotificationBridgeTests : IDisposable
     }
 
     [Fact]
-    public async Task AMissedCallSaysMissedCall()
+    public async Task AMissedCallShowsTheAppNotAMissedCallLabelTheDialerAlreadyWrote()
     {
-        await Send(N("c2", "Phone", "+30 210 5551234", "", "missed_call"));
-        Assert.Equal([("+30 210 5551234", "Missed call", "")], _notifier.Posts);
+        // the dialer's own title is "Missed call" and its text the caller: a second "Missed call" would be said twice
+        await Send(N("c2", "Phone", "Missed call", "Maria", "missed_call"));
+        Assert.Equal([("Missed call", "Phone", "Maria")], _notifier.Posts);
+    }
+
+    [Fact]
+    public async Task ACallWhoseCallerWasNamedLaterReplacesItsFirstNotification()
+    {
+        await Send(N("c3|100", "Phone", "6940931040", "", "call"));
+        await Send(N("c3|100", "Phone", "Maria Papadopoulou", "", "call"));   // same call, the contact was found
+        Assert.Equal(2, _notifier.Posts.Count);                                // a changed title is not a duplicate
+        Assert.NotNull(_notifier.Ids[0]);
+        Assert.Equal(_notifier.Ids[0], _notifier.Ids[1]);                      // so the second replaces the first on the Mac
+    }
+
+    [Fact]
+    public async Task ADifferentCallOrPhoneGetsANotificationOfItsOwn()
+    {
+        await Send(N("c4|100", "Phone", "Anna", "", "call"), "phoneA");
+        await Send(N("c4|200", "Phone", "Anna", "", "call"), "phoneA");
+        await Send(N("c4|100", "Phone", "Anna", "", "call"), "phoneB");
+        Assert.Equal(3, _notifier.Ids.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task OrdinaryNotificationsHaveNoReplaceId()
+    {
+        await Send(N("m1"));
+        Assert.Null(_notifier.Ids[0]);
     }
 
     [Fact]

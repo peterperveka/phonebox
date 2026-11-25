@@ -4,6 +4,9 @@ package net.oxog.phonebox.deskpanel
  *  [PAIR_AGAIN]: the Mac refused this phone's key (401): it was paired again or got a new key. */
 enum class SendResult { OK, OFF, TOO_LARGE, UNREACHABLE, UNKNOWN, PAIR_AGAIN }
 
+/** How the last notification went, for the screen. */
+enum class NotificationOutcome { NONE, OK, MAC_OFF, UNREACHABLE }
+
 /** Where the clipboard service is, for the Phone bridge screen. Kept in memory: it describes this process only. */
 enum class ClipboardState { STOPPED, WAITING, RUNNING, MAC_OFF, UNSUPPORTED, PAIR_AGAIN }
 
@@ -38,16 +41,51 @@ object BridgeClip {
     /** The body of POST /api/bridge/clipboard. */
     fun requestBody(text: String): String = buildString(text.length + 12) {
         append("{\"text\":\"")
-        for (c in text) when {
-            c == '"' -> append("\\\"")
-            c == '\\' -> append("\\\\")
-            c == '\n' -> append("\\n")
-            c == '\r' -> append("\\r")
-            c == '\t' -> append("\\t")
-            c < ' ' -> append("\\u").append(c.code.toString(16).padStart(4, '0'))
-            else -> append(c)
-        }
+        escapeInto(this, text)
         append("\"}")
+    }
+
+    /**
+     * The body of POST /api/bridge/notification; [time] is when the phone posted it (milliseconds). [iconBase64] is the posting
+     * app's icon as a small PNG in base64 (from [AppIcons]), shown by the Mac as the notification's picture; none is left out.
+     */
+    fun notificationBody(key: String, app: String, pkg: String, title: String, text: String, category: String, time: Long, iconBase64: String? = null): String {
+        val body = notificationJson(key, app, pkg, title, text, category, time, iconBase64)
+        // the agent refuses a notification request over 64 KiB (413) and the whole notification would be dropped: the icon (up to
+        // about 40 KB) is only a picture, so a body that grows past the limit with it is sent without it
+        if (iconBase64 == null || body.toByteArray(Charsets.UTF_8).size <= MAX_NOTIFICATION_BYTES) return body
+        return notificationJson(key, app, pkg, title, text, category, time, null)
+    }
+
+    /** The agent's limit for one POST /api/bridge/notification request (BridgeApi.MaxNotificationBytes). */
+    const val MAX_NOTIFICATION_BYTES = 64 * 1024
+
+    private fun notificationJson(key: String, app: String, pkg: String, title: String, text: String, category: String, time: Long, iconBase64: String?): String =
+        buildString(title.length + text.length + 120 + (iconBase64?.length ?: 0)) {
+            fun field(name: String, value: String, last: Boolean = false) {
+                append('"').append(name).append("\":\"")
+                escapeInto(this, value)
+                append(if (last) "\"," else "\",")
+            }
+            append('{')
+            field("key", key); field("app", app); field("package", pkg); field("title", title); field("text", text); field("category", category)
+            if (iconBase64 != null) append("\"icon\":\"").append(iconBase64).append("\",") // base64 holds nothing that needs escaping
+            append("\"time\":").append(time).append('}')
+        }
+
+    /** A JSON object as a map (strings, numbers as Double, booleans, null, nested maps and lists), or null when it is not one. */
+    fun parseObject(json: String): Map<String, Any?>? = Json(json).parseObject()
+
+    private fun escapeInto(out: StringBuilder, text: String) {
+        for (c in text) when {
+            c == '"' -> out.append("\\\"")
+            c == '\\' -> out.append("\\\\")
+            c == '\n' -> out.append("\\n")
+            c == '\r' -> out.append("\\r")
+            c == '\t' -> out.append("\\t")
+            c < ' ' -> out.append("\\u").append(c.code.toString(16).padStart(4, '0'))
+            else -> out.append(c)
+        }
     }
 
     /**
@@ -145,12 +183,44 @@ object BridgeClip {
         return out.toString()
     }
 
-    /** A strict reader for one flat JSON object; any problem makes [parseObject] return null. */
+    /**
+     * Whether the agent's /api/config says the computer shows phone notifications. The reply is {"version": "...", "config":
+     * { ... "bridge": {...} }}. True or false; null when the reply is not that shape (then the answer is unknown, not "off").
+     * An agent whose config has no bridge section (an older one) is off.
+     */
+    fun notificationsOn(replyJson: String): Boolean? {
+        val reply = Json(replyJson).parseObject() ?: return null
+        val config = reply["config"] as? Map<*, *> ?: return null
+        val bridge = config["bridge"] as? Map<*, *> ?: return false
+        return bridge["notifications"] == true
+    }
+
+    /** At most [max] characters: longer text is cut and ends with an ellipsis, never in the middle of an emoji. */
+    fun cut(text: String, max: Int): String {
+        if (max <= 0) return ""
+        if (text.length <= max) return text
+        var keep = max - 1
+        if (keep > 0 && text[keep - 1].isHighSurrogate()) keep--
+        return text.substring(0, keep) + "…"
+    }
+
+    /** A strict reader for one JSON object (strings, numbers, booleans, null, and nested objects and arrays); any problem makes [parseObject] return null. */
+    private const val MAX_DEPTH = 64
     private class Json(private val s: String) {
         private var i = 0
 
+        private var depth = 0
+
         fun parseObject(): Map<String, Any?>? = try {
-            ws(); expect('{'); ws()
+            ws()
+            val out = obj()
+            ws(); if (i != s.length) fail()
+            out
+        } catch (_: IllegalArgumentException) { null }
+
+        private fun obj(): Map<String, Any?> {
+            if (++depth > MAX_DEPTH) fail()
+            expect('{'); ws()
             val out = HashMap<String, Any?>()
             if (peek() == '}') i++
             else while (true) {
@@ -158,9 +228,22 @@ object BridgeClip {
                 out[key] = value(); ws()
                 when (next()) { ',' -> continue; '}' -> break; else -> fail() }
             }
-            ws(); if (i != s.length) fail()
-            out
-        } catch (_: IllegalArgumentException) { null }
+            depth--
+            return out
+        }
+
+        private fun arr(): List<Any?> {
+            if (++depth > MAX_DEPTH) fail()
+            expect('['); ws()
+            val out = ArrayList<Any?>()
+            if (peek() == ']') i++
+            else while (true) {
+                ws(); out.add(value()); ws()
+                when (next()) { ',' -> continue; ']' -> break; else -> fail() }
+            }
+            depth--
+            return out
+        }
 
         private fun fail(): Nothing = throw IllegalArgumentException()
         private fun peek(): Char = if (i < s.length) s[i] else fail()
@@ -169,6 +252,8 @@ object BridgeClip {
         private fun ws() { while (i < s.length && s[i] in " \t\r\n") i++ }
 
         private fun value(): Any? = when (peek()) {
+            '{' -> obj()
+            '[' -> arr()
             '"' -> string()
             't' -> literal("true", true)
             'f' -> literal("false", false)

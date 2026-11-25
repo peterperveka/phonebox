@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">표시되지 않은 텍스트가 더 있습니다(문자: %1$s, 줄: %2$s).</string>
     <string name="bridge_pair_again">Mac이 더 이상 이 휴대폰을 인식하지 못합니다. USB로 한 번 연결하거나 다시 페어링하세요.</string>
     <string name="bridge_send_unknown">Mac에서 응답이 없습니다. 텍스트가 도착했을 수 있습니다. 다시 보내기 전에 Mac에서 확인하세요.</string>
+    <string name="bridge_notifications_switch">Mac에 알림 표시</string>
+    <string name="bridge_notifications_help">통화, 메시지, 앱 알림이 내용과 함께 Mac에 표시됩니다. 앱을 개별적으로 선택하거나 모든 앱을 켜세요. Mac의 전화 브리지 설정에서도 전화 알림을 켜세요.</string>
+    <string name="bridge_access_missing">알림 접근이 아직 허용되지 않았습니다. PhoneBox가 알림을 보려면 필요합니다.</string>
+    <string name="bridge_access_granted">알림 접근이 허용되었습니다.</string>
+    <string name="bridge_access_button">알림 접근 허용</string>
+    <string name="bridge_restricted_help">스위치가 회색이면(Android 13 이상): 앱 정보를 열고 오른쪽 위 ⋮를 눌러 ‘제한된 설정 허용’을 선택한 다음 돌아와서 다시 시도하세요.</string>
+    <string name="bridge_app_info_button">앱 정보 열기</string>
+    <string name="bridge_apps_title">Mac에 표시할 앱</string>
+    <string name="bridge_apps_all">모든 앱</string>
+    <string name="bridge_last_none">아직 보낸 알림이 없습니다</string>
+    <string name="bridge_last_ok">마지막 알림이 Mac에 도착했습니다</string>
+    <string name="bridge_last_off">마지막 알림: Mac의 알림 스위치가 꺼져 있습니다</string>
+    <string name="bridge_last_failed">마지막 알림이 Mac에 도착하지 못했습니다. 2분 동안 보관됩니다</string>
+    <string name="bridge_access_idle">알림 접근은 허용되었지만 Android가 아직 리스너를 시작하지 않았습니다. 이 화면을 다시 열거나 PhoneBox의 배터리 설정을 확인하세요.</string>
     <string name="sleep_service_label">PhoneBox: PC와 함께 절전</string>
     <string name="sleep_service_description">PC가 잠기면 휴대폰 화면을 끕니다. PhoneBox는 화면의 내용을 읽지 않습니다.</string>
 </resources>

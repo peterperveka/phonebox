@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Dalej jest tekst, który nie jest pokazany (znaki: %1$s, wiersze: %2$s).</string>
     <string name="bridge_pair_again">Mac nie rozpoznaje już tego telefonu: podłącz go raz przez USB lub sparuj ponownie.</string>
     <string name="bridge_send_unknown">Brak odpowiedzi z Maca: tekst mógł dotrzeć. Sprawdź na Macu, zanim wyślesz go ponownie.</string>
+    <string name="bridge_notifications_switch">Pokazuj powiadomienia na Macu</string>
+    <string name="bridge_notifications_help">Połączenia, wiadomości i powiadomienia aplikacji pojawiają się na Macu wraz z tekstem. Wybierz poszczególne aplikacje lub włącz Wszystkie aplikacje. Włącz też powiadomienia z telefonu w ustawieniach mostu na Macu.</string>
+    <string name="bridge_access_missing">Dostęp do powiadomień nie jest jeszcze dozwolony. PhoneBox potrzebuje go, aby widzieć Twoje powiadomienia.</string>
+    <string name="bridge_access_granted">Dostęp do powiadomień jest dozwolony.</string>
+    <string name="bridge_access_button">Zezwól na dostęp do powiadomień</string>
+    <string name="bridge_restricted_help">Jeśli przełącznik jest wyszarzony (Android 13 i nowszy): otwórz Informacje o aplikacji, dotknij ⋮ w prawym górnym rogu, wybierz Zezwól na ustawienia z ograniczeniami, a potem wróć i spróbuj ponownie.</string>
+    <string name="bridge_app_info_button">Otwórz informacje o aplikacji</string>
+    <string name="bridge_apps_title">Aplikacje pokazywane na Macu</string>
+    <string name="bridge_apps_all">Wszystkie aplikacje</string>
+    <string name="bridge_last_none">Nie wysłano jeszcze żadnego powiadomienia</string>
+    <string name="bridge_last_ok">Ostatnie powiadomienie dotarło na Maca</string>
+    <string name="bridge_last_off">Ostatnie powiadomienie: przełącznik powiadomień na Macu jest wyłączony</string>
+    <string name="bridge_last_failed">Ostatnie powiadomienie nie dotarło na Maca; jest przechowywane przez dwie minuty</string>
+    <string name="bridge_access_idle">Dostęp do powiadomień jest dozwolony, ale Android nie uruchomił jeszcze nasłuchu. Otwórz ten ekran ponownie lub sprawdź ustawienie baterii PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: usypiaj razem z komputerem</string>
     <string name="sleep_service_description">Wyłącza ekran telefonu, gdy komputer się zablokuje. PhoneBox nic nie odczytuje z ekranu.</string>
 </resources>

@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- one lookup of the number of a call that rings, to show the contact's name on the Mac (asked only when notifications are on) -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Wake button only: names the Wi-Fi network so that the Wake-on-LAN packet cannot leave through mobile data -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -23,6 +25,11 @@
 
     <!-- Android 11+: the speech recognizer has to be visible to the app (Dictation widget) -->
     <queries>
+        <!-- the apps that can be switched on for the Mac (launchable apps only; no all-packages permission) -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
@@ -172,6 +179,19 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Shares the clipboard with the paired computer while the user has Phone bridge turned on" />
+        </service>
+
+        <!-- Phone bridge notifications: sees the phone's notifications to show them on the Mac. Disabled until the notification
+             switch is on (BridgeEntryPoints), so it is not in the system's Notification access list for anyone else. -->
+        <service
+            android:name=".PhoneNotificationListener"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/bridge_title"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <!-- Disabled until Phone bridge is turned on (BridgeEntryPoints): for everyone else the app does not start at boot. -->

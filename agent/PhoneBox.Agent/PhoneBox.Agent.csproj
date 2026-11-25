@@ -13,7 +13,7 @@
     <Product>PhoneBox</Product>
     <Company>PhoneBox</Company>
     <Description>PhoneBox desktop agent: feeds the PhoneBox Android desk panel over USB or Wi-Fi.</Description>
-    <Version>0.9.29</Version>
+    <Version>0.9.30</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
@@ -59,6 +59,7 @@
     <EmbeddedResource Include="config.default.linux.json" LogicalName="config.default.linux.json" />
     <EmbeddedResource Include="config.default.macos.json" LogicalName="config.default.macos.json" />
     <EmbeddedResource Include="phonebox.ico" LogicalName="phonebox.ico" />
+    <EmbeddedResource Include="Unix/notifier.swift" LogicalName="notifier.swift" />
     <EmbeddedResource Include="settings.html" LogicalName="settings.html" />
     <EmbeddedResource Include="widgets.json" LogicalName="widgets.json" />
     <EmbeddedResource Include="templates.json" LogicalName="templates.json" />

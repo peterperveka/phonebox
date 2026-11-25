@@ -36,6 +36,20 @@
     <string name="bridge_confirm_more">Ακολουθεί κι άλλο κείμενο που δεν εμφανίζεται (χαρακτήρες: %1$s, γραμμές: %2$s).</string>
     <string name="bridge_pair_again">Το Mac δεν αναγνωρίζει πια αυτό το τηλέφωνο: συνδέστε το μία φορά με USB ή κάντε ξανά σύζευξη.</string>
     <string name="bridge_send_unknown">Δεν ήρθε απάντηση από το Mac: το κείμενο ίσως έφτασε. Ελέγξτε στο Mac πριν το στείλετε ξανά.</string>
+    <string name="bridge_notifications_switch">Εμφάνιση ειδοποιήσεων στο Mac</string>
+    <string name="bridge_notifications_help">Οι κλήσεις, τα μηνύματα και οι ειδοποιήσεις εφαρμογών εμφανίζονται στο Mac μαζί με το κείμενό τους. Επιλέξτε εφαρμογές μεμονωμένα ή ενεργοποιήστε το «Όλες οι εφαρμογές». Ενεργοποιήστε και τις ειδοποιήσεις τηλεφώνου στις ρυθμίσεις της γέφυρας στο Mac.</string>
+    <string name="bridge_access_missing">Η πρόσβαση στις ειδοποιήσεις δεν έχει επιτραπεί ακόμη. Το PhoneBox τη χρειάζεται για να βλέπει τις ειδοποιήσεις σου.</string>
+    <string name="bridge_access_granted">Η πρόσβαση στις ειδοποιήσεις επιτρέπεται.</string>
+    <string name="bridge_access_button">Να επιτρέπεται η πρόσβαση στις ειδοποιήσεις</string>
+    <string name="bridge_restricted_help">Αν ο διακόπτης είναι γκριζαρισμένος (Android 13 και νεότερο): άνοιξε τις Πληροφορίες εφαρμογής, πάτησε ⋮ πάνω δεξιά, επίλεξε Να επιτρέπονται οι περιορισμένες ρυθμίσεις και ξαναδοκίμασε.</string>
+    <string name="bridge_app_info_button">Άνοιγμα πληροφοριών εφαρμογής</string>
+    <string name="bridge_apps_title">Εφαρμογές που εμφανίζονται στο Mac</string>
+    <string name="bridge_apps_all">Όλες οι εφαρμογές</string>
+    <string name="bridge_last_none">Δεν έχει σταλεί ακόμη ειδοποίηση</string>
+    <string name="bridge_last_ok">Η τελευταία ειδοποίηση έφτασε στο Mac</string>
+    <string name="bridge_last_off">Τελευταία ειδοποίηση: ο διακόπτης ειδοποιήσεων του Mac είναι ανενεργός</string>
+    <string name="bridge_last_failed">Η τελευταία ειδοποίηση δεν έφτασε στο Mac· διατηρείται για δύο λεπτά</string>
+    <string name="bridge_access_idle">Η πρόσβαση στις ειδοποιήσεις επιτρέπεται, αλλά το Android δεν έχει ξεκινήσει ακόμη τον ακροατή. Άνοιξε ξανά αυτή την οθόνη ή έλεγξε τη ρύθμιση μπαταρίας του PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: ύπνος μαζί με τον υπολογιστή</string>
     <string name="sleep_service_description">Σβήνει την οθόνη του τηλεφώνου όταν κλειδώνει ο υπολογιστής. Το PhoneBox δεν διαβάζει τίποτα στην οθόνη.</string>
 </resources>

@@ -33,7 +33,10 @@ Last updated: 2026-11-20 (PhoneBox 0.9.6).
   it also holds `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_SPECIAL_USE` (a service with a visible notification keeps
   the connection to your computer), `POST_NOTIFICATIONS` (so that notification can show, asked when you turn the
   switch on) and `RECEIVE_BOOT_COMPLETED` (to start that service again after a restart; the receiver is switched off,
-  and the app does not start at boot, while the bridge is off).
+  and the app does not start at boot, while the bridge is off). Notification forwarding uses Android's **Notification
+  access**, which you grant in Settings. Android may also ask for **Contacts** so PhoneBox can resolve a caller's
+  number as described below. PhoneBox requests no SMS, call-log or phone-state permission for forwarding and lists
+  launchable apps so you can choose which ones to send.
 - **Computer data shown on the panel** (CPU, GPU, memory, disks, processes, media, volume, AI coding sessions and
   quotas, Docker / Podman, OBS) is read locally and goes only to your phone: over the USB cable (`adb reverse` to
   `127.0.0.1`, with a key only the PhoneBox app has) or, after pairing, over Wi-Fi / Tailscale with a pinned certificate and a key. On Linux, an Intel GPU's
@@ -113,12 +116,33 @@ Last updated: 2026-11-20 (PhoneBox 0.9.6).
 - **Phone notifications on the computer, the phone bridge** (macOS only, off by default; **Settings › Phone bridge ›
   Show phone notifications on this Mac**): while it is on, the agent shows the call, message and app notifications your
   phone sends it, as ordinary macOS notifications: the app's name, the title (who is calling or who wrote) and the text. Only the apps you allow on the phone are sent, and only to this computer over the same USB / paired Wi-Fi
-  link as other panel data. macOS shows them under Script Editor's name, because that is how a program without its own
-  app shows a notification, and keeps them in Notification Center like any other. The agent does not store them or
+  link as other panel data. macOS shows them with the PhoneBox icon and the phone app's icon as the picture
+  when the agent can build its small notifier program (PhoneBox.app, in the agent's folder: built on this Mac from source
+  inside the agent with Apple's Swift compiler when Xcode or the command line tools are installed, nothing is downloaded,
+  and macOS asks once whether PhoneBox may show notifications). The agent keeps the app icons in memory only and forgets
+  them within half a minute of the setting being turned off; to attach one, the notifier writes it to a temporary file, which macOS moves into
+  its own notification store and keeps with the notification (a file macOS does not take is deleted). Otherwise they appear
+  under Script Editor's name, which is how a program without its own app shows a notification. macOS keeps them in
+  Notification Center like any other. The agent does not store them or
   write their text to its log (the log never holds their words). With **Copy one-time codes from
   messages** also on, a login code the agent finds in a message is put on this computer's clipboard, and is not sent on
   to your phones. Turning the setting off stops all of it at once, also
   for notifications that were waiting to be shown.
+- **Phone notifications, on the phone side of the phone bridge** (off by default; the app's **Phone bridge** screen › Show
+  notifications on the Mac, plus Android's Notification access): the app reads the notifications of the apps you switched
+  on (their name, title, text and kind; for a call, who is calling) and sends them only to your paired computer over the
+  same USB / paired Wi-Fi link, together with the posting app's icon (a small PNG, so the computer can show it as the
+  notification's picture). The **All apps** switch on the Phone bridge screen (off until you turn it on) sends every app's
+  notifications instead of the list, which includes banking, security and other private ones. Opening the Phone bridge
+  screen while forwarding is on can prompt once for **Contacts**. With permission, PhoneBox can look up the number shown
+  in a Samsung in-call UI notification and use a matching contact name as its title. Selecting the default dialer also
+  allows Samsung's in-call UI call notifications because that app posts calls for the dialer. Its incoming and outgoing
+  calls use the same format, so either can be forwarded. If PhoneBox learns the name later for a Samsung call, it sends
+  an update with the title, text, app metadata and icon when available. PhoneBox always excludes its own notifications
+  and ongoing media. The app holds up to 20 unsent notifications in memory. At the next delivery attempt, it discards
+  entries at least two minutes old. Notification contents stay out of the phone's log and storage. If you enable
+  `PhoneBoxBridge` debug logging with adb, the phone can log app package names and call flags, including for skipped calls.
+  Until you turn the switch on, the app does not even appear in Android's Notification access list.
 - **Sound for the Spectrum bars widget** (Windows): while an enabled page with the widget is on the phone's screen,
   the agent captures what the default output device plays, analyzes it in memory and sends only 48 loudness levels
   per frame to the phone. Audio is never stored or sent; capture stops a few seconds after the widget leaves the
@@ -170,6 +194,7 @@ shows it.
 
 | Feature | Where | What is sent |
 |---|---|---|
+| iPhone USB connection | The local usbmuxd service (`127.0.0.1:27015` on Windows, `/var/run/usbmuxd` or `/run/usbmuxd` on macOS and Linux), while the agent’s Wi-Fi & Tailscale listener is enabled. Turn it off in the agent settings and restart the agent to stop connections | Device discovery and a connection request for a USB device’s local relay. The response to the iPhone’s fresh challenge uses the existing pairing key. The service relays encrypted HTTPS between the agent and the paired iPhone |
 | Grok quota | Only while an enabled page shows Grok quotas (a Quotas or CodexBar widget, or a Clock with its status line, whose providers include Grok, or a Quota ring set to Grok) and the Grok CLI is signed in on this computer. `cli-chat-proxy.grok.com/v1/billing?format=credits` every 3 minutes after a successful check (sooner after a failed one, as often as every 30 seconds while the network is down; later when Grok asks it to wait), and `cli-chat-proxy.grok.com/v1/settings` for the plan name at most every 6 hours (that request gives up after 2 seconds). Remove those widgets, or take Grok out of their providers, to stop the requests | The bearer token the Grok CLI stores in `~/.grok/auth.json` (`GROK_HOME` overrides that folder); read-only, PhoneBox never refreshes it, never logs it and never sends it to the phone |
 | Codex live quota (opt-in) | Off by default until turned on in **Settings › General › AI quotas & CodexBar › Read live Codex quotas with the Codex CLI**, and only while Codex is selected in the provider list and fresh CodexBar data is unavailable. This also serves custom widgets that read the quota API. Runs the local `codex` CLI (`codex app-server`), which contacts its configured OpenAI/ChatGPT endpoints (by default `chatgpt.com` / `api.openai.com`) about every 3 minutes, backing off up to 30 minutes on failure. Turn off by unchecking **Read live Codex quotas with the Codex CLI** | PhoneBox sends only `initialize` metadata and `account/rateLimits/read` over local stdio (no prompt or thread) and never reads or logs credentials; the Codex CLI uses its own sign-in and may refresh and rewrite `~/.codex/auth.json` |
 | Discord widget | `discord.com/api/oauth2/token`, once at login and when the token needs renewing; `cdn.discordapp.com`, once per server icon and avatar shown (the agent fetches them, the phone never contacts Discord; the rest goes through the Discord app on this PC, locally). Turn off in **Settings › General › Discord** | The application's client ID and secret, and the one-time login code or the saved refresh token; for images only the image's id and hash, which Discord already knows. For favourite servers and channels the names and avatars of the people in voice channels you are not in reach the phone too (read from the Discord app on this PC, kept in memory only). With screen share on (off by default) and a Discord widget's **Control** on, the names of the apps with a window on this PC (Windows only) with their process IDs, and the name of what you share, go to the phone while its share view is open, and the phone sends back the process ID of the app you pick (the name of what you share goes with that view only). The current-channel bar's own **Control** gets only whether you share, for its Live badge and Stop button, never the app list or the name; no game list is fetched. With the read-only chat on (off by default), these reach the phone, read from the Discord app on this PC: the text of the messages in the channel shown and the names and avatars of their authors, the names of your servers and their text channels, and, in a direct or group call, the messages of that conversation. All of it is kept in memory only, never in a file or the log |

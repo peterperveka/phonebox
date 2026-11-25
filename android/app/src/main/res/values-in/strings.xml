@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Ada teks lanjutan yang tidak ditampilkan (karakter: %1$s, baris: %2$s).</string>
     <string name="bridge_pair_again">Mac tidak lagi mengenali ponsel ini: sambungkan sekali lewat USB atau pasangkan lagi.</string>
     <string name="bridge_send_unknown">Tidak ada jawaban dari Mac: teks mungkin sudah sampai. Periksa di Mac sebelum mengirim lagi.</string>
+    <string name="bridge_notifications_switch">Tampilkan notifikasi di Mac</string>
+    <string name="bridge_notifications_help">Panggilan, pesan, dan notifikasi aplikasi muncul di Mac beserta teksnya. Pilih aplikasi satu per satu atau aktifkan Semua aplikasi. Aktifkan juga notifikasi ponsel di pengaturan Jembatan ponsel pada Mac.</string>
+    <string name="bridge_access_missing">Akses notifikasi belum diizinkan. PhoneBox membutuhkannya untuk melihat notifikasi Anda.</string>
+    <string name="bridge_access_granted">Akses notifikasi diizinkan.</string>
+    <string name="bridge_access_button">Izinkan akses notifikasi</string>
+    <string name="bridge_restricted_help">Jika sakelar berwarna abu-abu (Android 13 ke atas): buka Info aplikasi, ketuk ⋮ di kanan atas, pilih Izinkan setelan terbatas, lalu kembali dan coba lagi.</string>
+    <string name="bridge_app_info_button">Buka Info aplikasi</string>
+    <string name="bridge_apps_title">Aplikasi yang ditampilkan di Mac</string>
+    <string name="bridge_apps_all">Semua aplikasi</string>
+    <string name="bridge_last_none">Belum ada notifikasi yang dikirim</string>
+    <string name="bridge_last_ok">Notifikasi terakhir sampai ke Mac</string>
+    <string name="bridge_last_off">Notifikasi terakhir: sakelar notifikasi Mac mati</string>
+    <string name="bridge_last_failed">Notifikasi terakhir tidak sampai ke Mac; disimpan selama dua menit</string>
+    <string name="bridge_access_idle">Akses notifikasi diizinkan, tetapi Android belum memulai pendengarnya. Buka layar ini lagi, atau periksa pengaturan baterai PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: tidur bersama PC</string>
     <string name="sleep_service_description">Mematikan layar ponsel saat PC terkunci. PhoneBox tidak membaca apa pun di layar.</string>
 </resources>

@@ -34,6 +34,20 @@
     <string name="bridge_confirm_more">Segue altro testo che non viene mostrato (caratteri: %1$s, righe: %2$s).</string>
     <string name="bridge_pair_again">Il Mac non riconosce più questo telefono: collegalo una volta via USB o associalo di nuovo.</string>
     <string name="bridge_send_unknown">Nessuna risposta dal Mac: il testo potrebbe essere arrivato. Controlla sul Mac prima di inviarlo di nuovo.</string>
+    <string name="bridge_notifications_switch">Mostra le notifiche sul Mac</string>
+    <string name="bridge_notifications_help">Chiamate, messaggi e notifiche delle app appaiono sul Mac con il loro testo. Scegli singole app o attiva Tutte le app. Attiva anche le notifiche del telefono nelle impostazioni del collegamento sul Mac.</string>
+    <string name="bridge_access_missing">L\'accesso alle notifiche non è ancora consentito. PhoneBox ne ha bisogno per vedere le tue notifiche.</string>
+    <string name="bridge_access_granted">L\'accesso alle notifiche è consentito.</string>
+    <string name="bridge_access_button">Consenti l\'accesso alle notifiche</string>
+    <string name="bridge_restricted_help">Se l\'interruttore è disattivato (Android 13 e successivi): apri Info app, tocca ⋮ in alto a destra, scegli Consenti impostazioni con limitazioni, poi torna qui e riprova.</string>
+    <string name="bridge_app_info_button">Apri Info app</string>
+    <string name="bridge_apps_title">App mostrate sul Mac</string>
+    <string name="bridge_apps_all">Tutte le app</string>
+    <string name="bridge_last_none">Nessuna notifica ancora inviata</string>
+    <string name="bridge_last_ok">L\'ultima notifica è arrivata sul Mac</string>
+    <string name="bridge_last_off">Ultima notifica: l\'interruttore delle notifiche del Mac è disattivato</string>
+    <string name="bridge_last_failed">L\'ultima notifica non ha raggiunto il Mac; viene conservata per due minuti</string>
+    <string name="bridge_access_idle">L\'accesso alle notifiche è consentito, ma Android non ha ancora avviato l\'ascoltatore. Riapri questa schermata o controlla l\'impostazione della batteria di PhoneBox.</string>
     <string name="sleep_service_label">PhoneBox: sospendi con il PC</string>
     <string name="sleep_service_description">Spegne lo schermo del telefono quando il PC si blocca. PhoneBox non legge nulla sullo schermo.</string>
 </resources>

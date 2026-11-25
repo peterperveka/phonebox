@@ -79,6 +79,14 @@ builder.Services.AddSingleton<AppCatalog>();
 builder.Services.AddSingleton(_ => new ShortcutIconUploads(Path.Combine(configDir, "icons")));
 builder.Services.AddSingleton(_ => new WallpaperStore(configDir));
 builder.Services.AddSingleton<PairingCodes>();
+// The iOS app's cable link: usbmuxd reaches the app's loopback relay, and each authenticated pipe carries the
+// panel's TLS to the Wi-Fi listener above (see IosUsbBridge). It starts on its own and is quiet without an iPhone.
+builder.Services.AddSingleton(sp => new IosUsbBridge(
+    sp.GetRequiredService<ConfigStore>(),
+    sp.GetRequiredService<AgentEndpoint>(),
+    lanCfg,
+    sp.GetRequiredService<ILogger<IosUsbBridge>>()));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<IosUsbBridge>());
 builder.Services.AddSingleton<SpotifyControl>();
 builder.Services.AddSingleton<PlexControl>();
 builder.Services.AddSingleton<ControlDeck>();
@@ -97,7 +105,10 @@ if (OperatingSystem.IsMacOS())
     builder.Services.AddSingleton(sp => new ClipboardBridge(sp.GetRequiredService<ITextPasteboard>(), sp.GetRequiredService<ConfigStore>(),
         sp.GetRequiredService<BridgeStream>(), sp.GetRequiredService<ILogger<ClipboardBridge>>()));
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ClipboardBridge>());
-    builder.Services.AddSingleton<IMacNotifier>(_ => new OsaScriptNotifier());
+    // the PhoneBox icon and the phone app's icon when the small notifier program can be built here, osascript's plain one otherwise
+    builder.Services.AddSingleton<IMacNotifier>(sp => new FallbackNotifier(
+        MacAppNotifier.Create(Path.Combine(configDir, "notifier"), sp.GetRequiredService<ILoggerFactory>().CreateLogger("PhoneBox.Agent.MacAppNotifier")),
+        new OsaScriptNotifier()));
     builder.Services.AddSingleton(sp => new NotificationBridge(sp.GetRequiredService<IMacNotifier>(), sp.GetRequiredService<ConfigStore>(),
         sp.GetService<ClipboardBridge>(), () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), sp.GetRequiredService<ILogger<NotificationBridge>>()));
     builder.Services.AddHostedService(sp => sp.GetRequiredService<NotificationBridge>());
@@ -347,7 +358,8 @@ app.MapGet("/api/lan", (ConfigStore cfg) => Results.Json(new
     fingerprint = lanCert is null ? null : Lan.Fingerprint(lanCert),
 }));
 
-app.MapGet("/api/update", (UpdateService upd, ConfigStore cfg) => Results.Json(new { status = upd.Status(), auto = cfg.Get().Updates.Auto, installed = UpdateService.CanUpdateAgent }));
+app.MapGet("/api/update", (UpdateService upd, ConfigStore cfg, HttpRequest req) =>
+    Results.Json(new { status = upd.Status(!RequestGate.IsIosApp(req.Headers)), auto = cfg.Get().Updates.Auto, installed = UpdateService.CanUpdateAgent }));
 // Settings › General: install the phone app on a phone that does not have it yet (local only).
 app.MapPost("/api/phone/install", async (UpdateService upd) =>
     await upd.InstallAppAsync() is { } error ? Results.BadRequest(new { error }) : Results.Ok(new { ok = true }));
@@ -610,13 +622,13 @@ app.MapPost("/api/refresh", (bool? reload, PushStore push) =>
 });
 
 // ---------------------------------------------------------------- phone panel API
-object State(IServiceProvider sp, long? ev)
+object State(IServiceProvider sp, long? ev, bool includeAndroid = true)
 {
     var upd = sp.GetRequiredService<UpdateService>();
     var push = sp.GetRequiredService<PushStore>();
     return new
     {
-        update = upd.Status() is { } u && (u.AppUpdate || u.AgentUpdate) ? new { latest = u.Latest, app = u.AppUpdate, agent = u.AgentUpdate } : null,
+        update = upd.Status(includeAndroid) is { } u && (u.AppUpdate || u.AgentUpdate) ? new { latest = u.Latest, app = u.AppUpdate, agent = u.AgentUpdate } : null,
         ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         host = Environment.MachineName,
         os = AppPaths.Os, // the Trackpad's gesture vibration is only for the computers that act on a gesture (macOS)
@@ -862,13 +874,15 @@ app.MapPost("/api/rules/pause", (int? minutes, RuleEngine rules) =>
     return Results.Ok(new { pausedUntil = rules.PausedUntil() });
 });
 
-app.MapGet("/api/state", (long? ev, HttpContext ctx) => Results.Json(State(ctx.RequestServices, ev)));
+app.MapGet("/api/state", (long? ev, HttpContext ctx) =>
+    Results.Json(State(ctx.RequestServices, ev, !RequestGate.IsIosApp(ctx.Request.Headers))));
 
 // Live stream (server-sent events) for the phone: "state" every second, "event" as soon as one happens, "work" when it
 // changes. The Android shell keeps one connection open instead of polling; the panel falls back to polling without it.
-// One "state" frame for all open streams: they wake on the same second (below), so the state is built and serialized once
-// per tick, not once per phone. Everything State() reads is a singleton, so the root provider will do.
+// Open streams wake on the same second, so build one state frame per platform group on each tick.
+// Everything State() reads is a singleton, so the root provider will do.
 var stateFrames = new StateFrameCache(() => State(app.Services, null), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+var iosStateFrames = new StateFrameCache(() => State(app.Services, null, includeAndroid: false), new JsonSerializerOptions(JsonSerializerDefaults.Web));
 app.MapGet("/api/stream", async (HttpContext ctx, PushStore push, SessionMonitor sessions, GitHubMonitor gh, SpectrumAnalyzer spectrum,
     IHostApplicationLifetime life, ILogger<Program> log) =>
 {
@@ -877,6 +891,7 @@ app.MapGet("/api/stream", async (HttpContext ctx, PushStore push, SessionMonitor
     using var linked = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted, life.ApplicationStopping);
     var ct = linked.Token;
     var isPhone = ctx.Request.Headers.ContainsKey("X-PhoneBox-App");
+    var frames = RequestGate.IsIosApp(ctx.Request.Headers) ? iosStateFrames : stateFrames;
     var via = ctx.Connection.LocalPort == usb.Port ? "USB" : ctx.Connection.LocalPort == Port ? "local" : "Wi-Fi";
     log.LogInformation("live stream opened ({Who}, {Via})", isPhone ? "phone" : "other client", via);
     ctx.Response.ContentType = "text/event-stream";
@@ -912,7 +927,7 @@ app.MapGet("/api/stream", async (HttpContext ctx, PushStore push, SessionMonitor
             {
                 Volatile.Write(ref poked, 0); // before the frame is built: a change during the build is answered by the next pass
                 if (isPhone) Interlocked.Exchange(ref ApprovalStore.PhoneLastSeen, now);
-                await ctx.Response.WriteAsync(stateFrames.Get(push.Seq, StateSignal.Version), ct);
+                await ctx.Response.WriteAsync(frames.Get(push.Seq, StateSignal.Version), ct);
                 await ctx.Response.Body.FlushAsync(ct);
                 lastState = now;
             }
