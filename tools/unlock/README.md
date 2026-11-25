@@ -10,7 +10,7 @@ do kópie; vrátenie = `rm /etc/pam.d/polkit-1`. Testuj v *novom* termináli a k
 Kábel na USB musí byť dátový (terajší len nabíja).
 Zamknuté PC odomkneš priložením prsta na snímač telefónu, bez okna na telefóne (len pre obrazovku; sudo a polkit
 ostávajú s oknom). So zaškrtnutým „Follow the computer lock“ Super+L uspí aj mobil a jedno stlačenie tlačidla
-napájania s prstom odomkne mobil aj PC. Po aktualizácii treba raz znova nastaviť kľúč na telefóne a spustiť `enroll`.
+napájania s prstom odomkne mobil aj PC. Na telefóne raz zapni Nastavenia › Dostupnosť › PhoneBox: sleep with the PC (funguje aj cez Wi-Fi). Po aktualizácii treba raz znova nastaviť kľúč na telefóne a spustiť `enroll`.
 
 Commands are for this machine (Fedora, GNOME, user in `$USER`). Run everything from the repository root of this branch.
 
@@ -181,6 +181,13 @@ Super+L then also turns the phone screen off. Press the phone's power button and
 unlocks with its fingerprint and, within a second, the PC unlocks too. The unlock key opens for 5 s after any
 fingerprint, so the phone's own unlock is enough. If you unlock the phone with its PIN instead, the panel shows the
 touch hint: touch the sensor once more.
+
+Some phones refuse the agent's sleep key over USB (Xiaomi without a SIM cannot turn on "USB debugging (Security
+settings)"), and over Wi-Fi there is no ADB at all. The panel then puts the phone to sleep itself: turn on **Settings ›
+Accessibility › PhoneBox: sleep with the PC** once (the panel's **Turn on** button opens that screen; on Android 13+
+you may first need App info › ⋮ › **Allow restricted settings**). The service reads nothing on the screen; it only
+locks it, like the power button. It works over Wi-Fi as well. Over USB, unlocking the PC by password lights the phone
+again; over Wi-Fi, wake it with the button.
 
 ## 8. Undo
 
