@@ -513,6 +513,24 @@ class MainActivity : Activity(), SensorEventListener {
         setIntent(intent)
         standbyNoteAgentWake(intent)
         handlePairingLink(intent)
+        wakeIfDark()
+    }
+
+    /**
+     * The agent opens the panel with am start when the PC unlocks; on a phone that went dark with the PC (it put
+     * itself to sleep, see PanelSleepService) that alone leaves the screen off. A short wake lock lights it; the
+     * keyguard then asks for the fingerprint as usual.
+     */
+    private fun wakeIfDark() {
+        val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager ?: return
+        if (pm.isInteractive) return
+        try {
+            @Suppress("DEPRECATION")
+            pm.newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "PhoneBox:wake").acquire(3_000)
+        } catch (e: Exception) {
+            Log.w("PhoneBox", "could not light the screen: ${e.javaClass.simpleName}")
+        }
     }
 
     /** A pairing link from the computer's QR code (Settings › Wi-Fi › Pair a phone over Wi-Fi): ask, then pair. */
@@ -1042,6 +1060,29 @@ class MainActivity : Activity(), SensorEventListener {
             unlockBusy.set(false)
             val js = "window.pbUnlockDone && window.pbUnlockDone(${JSONObject.quote(id)}, $done)"
             runOnUiThread { if (!destroyed) web.evaluateJavascript(js, null) }
+        }
+
+        /** Whether the panel can turn the screen off itself: the accessibility service is on (Android 9+). */
+        @JavascriptInterface
+        fun canSleep(key: String): Boolean = ok(key) && Build.VERSION.SDK_INT >= 28 && PanelSleepService.connected != null
+
+        /** Screen off and keyguard locked, like the power button; false without the accessibility service. */
+        @JavascriptInterface
+        fun sleepPhone(key: String): Boolean {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return false
+            val service = PanelSleepService.connected ?: return false
+            runOnUiThread { if (!service.lockNow()) Log.w("PhoneBox", "lock screen refused") }
+            return true
+        }
+
+        /** Opens Settings › Accessibility, where the user turns on PhoneBox's screen-off service. */
+        @JavascriptInterface
+        fun openAccessibilitySettings(key: String) {
+            if (!ok(key)) return
+            runOnUiThread {
+                try { startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                catch (e: Exception) { Log.w("PhoneBox", "accessibility settings unavailable: ${e.javaClass.simpleName}") }
+            }
         }
 
         /** Touch to unlock: the panel asks to listen while the PC is locked (and no sudo card is shown), or to stop. */
