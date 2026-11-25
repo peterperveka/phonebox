@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PhoneBox.Agent;
 
 var endpoint = AgentEndpoint.FromArgs(args);
@@ -104,7 +105,7 @@ if (OperatingSystem.IsMacOS())
 #endif
 builder.Services.AddSingleton<CommandRunner>();
 builder.Services.AddSingleton<ApprovalStore>();
-Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton(builder.Services, TimeProvider.System);
+builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<UnlockStore>();
 builder.Services.AddSingleton<ILoginSession, LoginSession>();
 builder.Services.AddSingleton<UnlockService>();
@@ -248,7 +249,7 @@ app.Use((ctx, next) =>
 var timings = new RequestTimings();
 app.Use(async (ctx, next) =>
 {
-    if (!ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/api/stream") || ctx.Request.Path == "/api/bridge/stream") { await next(ctx); return; }
+    if (!ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/api/stream") || ctx.Request.Path == "/api/bridge/stream" || ctx.Request.Path == "/api/unlock/request") { await next(ctx); return; }
     var started = System.Diagnostics.Stopwatch.GetTimestamp();
     try { await next(ctx); }
     finally
@@ -1039,9 +1040,15 @@ app.MapPost("/api/unlock/enroll", async (HttpRequest req, ConfigStore cfg, ILogg
 {
     var body = await ReadUnlockBody<UnlockEnrollBody>(req);
     if (body?.PublicKey is not { } key || UnlockChallenge.CheckCode(key) is not { } code) return Results.BadRequest(new { error = "invalid public key" });
-    var copy = JsonSerializer.Deserialize<AgentConfig>(JsonSerializer.Serialize(cfg.Get(), ConfigStore.WriteOpts), ConfigStore.WriteOpts)!;
-    copy.Unlock.PublicKey = key;
-    var err = cfg.Save(JsonSerializer.Serialize(copy, ConfigStore.WriteOpts));
+    string? err;
+    lock (IconCommit)
+    {
+        var version = cfg.Version;
+        var copy = JsonSerializer.Deserialize<AgentConfig>(JsonSerializer.Serialize(cfg.Get(), ConfigStore.WriteOpts), ConfigStore.WriteOpts)!;
+        copy.Unlock.PublicKey = key;
+        err = cfg.Save(JsonSerializer.Serialize(copy, ConfigStore.WriteOpts), version);
+    }
+    if (err == ConfigStore.Conflict) return Results.Json(new { error = err }, statusCode: StatusCodes.Status409Conflict);
     if (err is not null) return Results.BadRequest(new { error = err });
     log.LogInformation("Unlock: phone enrolled, check code {Code}", code);
     return Results.Ok();
