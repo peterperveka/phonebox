@@ -111,6 +111,8 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.setup": "Nastavit odemykání otiskem prstu",
       "unlock.failed": "Neodemčeno",
       "unlock.touch": "Dotkněte se snímače pro odemčení počítače",
+      "sleep.enable": "Uspávat telefon spolu s počítačem",
+      "sleep.open": "Zapnout",
       "unlock.compare": "Porovnejte tento kód s \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\" na počítači",
       "s.unlock.enabled": "Odemykání otiskem prstu z telefonu (sudo, dialogy hesel jako 1Password a zamykací obrazovka GNOME; Linux)",
       "panel.oneOfN": "1 of {n}",

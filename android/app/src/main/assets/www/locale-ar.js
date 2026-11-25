@@ -111,6 +111,8 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.setup": "إعداد فتح القفل بالبصمة",
       "unlock.failed": "لم يتم الفتح",
       "unlock.touch": "المس المستشعر لفتح قفل الكمبيوتر",
+      "sleep.enable": "اجعل الهاتف يسكن مع الكمبيوتر",
+      "sleep.open": "تشغيل",
       "unlock.compare": "قارن هذا الرمز مع \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\" على الحاسوب",
       "s.unlock.enabled": "فتح القفل ببصمة الإصبع من الهاتف (sudo ونوافذ كلمات المرور مثل 1Password وشاشة قفل GNOME؛ Linux)",
       "panel.oneOfN": "1 من {n}",

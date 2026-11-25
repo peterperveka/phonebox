@@ -64,7 +64,7 @@ export const $ = (id) => document.getElementById(id);
 // the panel's own frames receive (MainActivity.bridgeKey). This wrapper adds it.
 const BRIDGE = ['battery', 'buzz', 'haptic', 'is24Hour', 'pcs', 'selectPc', 'forgetPc', 'setBrightness', 'setHomeScreen', 'setOrientation',
   'setPinned', 'setVolumeKeys', 'setStandby', 'setLanguage', 'transport', 'sensors', 'version', 'canListen', 'listen', 'stopListening', 'cancelListening', 'trackpad', 'canWake', 'wakePc', 'openBridge',
-  'unlockSupported', 'unlockSetup', 'unlockCode', 'unlockPrompt', 'unlockSign', 'unlockListen'];
+  'unlockSupported', 'unlockSetup', 'unlockCode', 'unlockPrompt', 'unlockSign', 'unlockListen', 'canSleep', 'sleepPhone', 'openAccessibilitySettings'];
 export const bridge = typeof Android === 'undefined' ? null : Object.fromEntries(BRIDGE.filter((m) => typeof Android[m] === 'function')
   .map((m) => [m, (...args) => Android[m](window.__phoneboxKey || '', ...args)]));
 // Live preview inside the agent's layout editor: the layout comes from the editor (unsaved), not from the agent.
@@ -1430,6 +1430,7 @@ let codeMissing = null;   // cached: does this phone lack a usable key? Refreshe
 let codeFor;               // the `enrolled` value the cache was read for
 let unlockMsgTimer = 0;
 let listenWanted = null;  // touch to unlock: what the app was last told; null until the first render, so a reloaded panel always tells it
+let lastLocked = null;     // follow the computer lock: the PC's lock as last seen (null until the first state)
 let listenStopped = false; // the app reported that Android stopped the sensor: the Unlock PC button is back
 
 export async function loadUnlock() {
@@ -1440,7 +1441,7 @@ export async function loadUnlock() {
     try { supported = !!bridge.unlockSupported(); } catch (_) {}
     if (!supported) { unlockState = null; }
     else {
-      try { unlockState = await api('/unlock/state', 'GET', 8000); }
+      try { unlockState = await api('/unlock/state', 'GET', 8000); followLock(); }
       catch (e) {
         // an agent without the feature answers 404: nothing to show. Any other failure keeps what is on screen.
         if (e && e.status === 404) unlockState = null; else return;
@@ -1499,7 +1500,13 @@ export function renderUnlock() {
   $('ukScreen').hidden = !showScreen || touch;
   $('ukSetup').hidden = !setup;
   $('ukMsg').hidden = !$('ukMsg').textContent;
-  bar.hidden = !(showScreen || setup || $('ukMsg').textContent);
+  // follow the computer lock needs the accessibility service: offer it until it is on
+  let offerSleep = false;
+  if (cfg.display?.followComputerLock && typeof bridge.canSleep === 'function') {
+    try { offerSleep = !bridge.canSleep(); } catch (_) {}
+  }
+  $('ukSleep').hidden = $('ukSleepOn').hidden = !offerSleep;
+  bar.hidden = !(showScreen || setup || $('ukMsg').textContent || offerSleep);
 }
 
 $('ukFp').addEventListener('click', () => {
@@ -1534,12 +1541,28 @@ $('ukSetup').addEventListener('click', () => {
   // the code is shown for 30 s so it can be compared with the one the PC prints
   unlockMessage(code ? `${code} · ${t('unlock.compare')}` : t('unlock.failed'), code ? 30000 : 4000);
 });
+// Follow the computer lock: the PC just locked (an edge, not a state), so the phone goes dark the way the power button
+// does it, through the app's accessibility service. Once per lock: a phone woken while the PC stays locked stays awake,
+// and a panel that starts on a PC that is already locked does not put the phone to sleep.
+function followLock() {
+  const now = !!(unlockState && unlockState.enabled && unlockState.locked);
+  if (lastLocked === false && now && cfg.display?.followComputerLock && typeof bridge.sleepPhone === 'function') {
+    try { bridge.sleepPhone(); } catch (_) {}
+  }
+  lastLocked = now;
+}
+
 function setListen(on) {
   if (on === listenWanted) return;
   listenWanted = on;
   listenStopped = false;
   try { bridge.unlockListen(on); } catch (_) {}
 }
+
+$('ukSleepOn').addEventListener('click', () => {
+  haptic();
+  try { bridge.openAccessibilitySettings(); } catch (_) {}
+});
 
 // the app reports touch-to-unlock: "listening", "unlocked", "failed" (the PC refused; it listens on), "stopped"
 window.pbUnlockListen = (state) => {

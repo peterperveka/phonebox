@@ -2,12 +2,15 @@
 // text comes from the app's unlockPrompt, never from the agent; Use password cancels, the screen button signs "screen".
 const { test, expect } = require('@playwright/test');
 
-async function open(page, { state, supported = true, prompt = '{"title":"sudo from the app","detail":"detail from the app"}', code = 'ABC123', android = true, listen = false }) {
-  await page.addInitScript(({ supported, prompt, code, android, listen }) => {
+async function open(page, { state, supported = true, prompt = '{"title":"sudo from the app","detail":"detail from the app"}', code = 'ABC123', android = true, listen = false, sleep = false }) {
+  await page.addInitScript(({ supported, prompt, code, android, listen, sleep }) => {
     window.__phoneboxKey = 'k';
     window.__signs = [];
     window.__setups = 0;
     window.__listens = [];
+    window.__sleeps = 0;
+    window.__a11y = 0;
+    window.__canSleep = true;
     if (!android) return;
     window.Android = {
       unlockSupported: () => supported,
@@ -17,7 +20,12 @@ async function open(page, { state, supported = true, prompt = '{"title":"sudo fr
       unlockSign: (key, id, challenge, mode) => { window.__signs.push({ key, id, challenge, mode }); },
     };
     if (listen) window.Android.unlockListen = (key, on) => { window.__listens.push(on); };
-  }, { supported, prompt, code, android, listen });
+    if (sleep) Object.assign(window.Android, {
+      canSleep: () => window.__canSleep,
+      sleepPhone: () => { window.__sleeps++; return true; },
+      openAccessibilitySettings: () => { window.__a11y++; },
+    });
+  }, { supported, prompt, code, android, listen, sleep });
   await page.goto('/panel/');
   await expect(page.locator('#dots i')).not.toHaveCount(0);
   await page.evaluate(async (state) => {
@@ -177,4 +185,56 @@ test('an app without unlockListen keeps the Unlock PC button', async ({ page }) 
 test('a fresh panel tells the app not to listen while the PC is unlocked', async ({ page }) => {
   await open(page, { state: { enabled: true, enrolled: true, locked: false, screen: null, request: null }, listen: true });
   expect(await page.evaluate(() => window.__listens)).toEqual([false]);
+});
+
+// ---------------------------------------------------------------- the phone sleeps with the PC (follow the computer lock)
+const unlocked = () => ({ enabled: true, enrolled: true, locked: false, screen: null, request: null });
+const follow = (page, on) => page.evaluate(async (on) => {
+  const m = await import('/panel/main.js');
+  m.cfg.display.followComputerLock = on;
+  m.renderUnlock();
+}, on);
+
+test('the phone sleeps once when the PC locks', async ({ page }) => {
+  await open(page, { state: unlocked(), sleep: true });
+  await follow(page, true);
+  await reload(page, { locked: true, screen: 'scr' });
+  expect(await page.evaluate(() => window.__sleeps)).toBe(1);
+  await reload(page, {});
+  expect(await page.evaluate(() => window.__sleeps)).toBe(1);
+});
+
+test('a phone woken while the PC stays locked is not slept again', async ({ page }) => {
+  await open(page, { state: unlocked(), sleep: true });
+  await follow(page, true);
+  await reload(page, { locked: true, screen: 'scr' });
+  await reload(page, {});
+  await reload(page, {});
+  expect(await page.evaluate(() => window.__sleeps)).toBe(1);
+});
+
+test('a fresh panel on an already locked PC does not sleep the phone', async ({ page }) => {
+  await open(page, { state: locked(), sleep: true });
+  await follow(page, true);
+  await reload(page, {});
+  expect(await page.evaluate(() => window.__sleeps)).toBe(0);
+});
+
+test('follow-lock off never sleeps the phone', async ({ page }) => {
+  await open(page, { state: unlocked(), sleep: true });
+  await follow(page, false);
+  await reload(page, { locked: true, screen: 'scr' });
+  expect(await page.evaluate(() => window.__sleeps)).toBe(0);
+});
+
+test('without the service the bar offers to turn it on', async ({ page }) => {
+  await open(page, { state: unlocked(), sleep: true });
+  await page.evaluate(() => { window.__canSleep = false; });
+  await follow(page, true);
+  await expect(page.locator('#ukSleep')).toHaveText('Let the phone sleep with the PC');
+  await page.locator('#ukSleepOn').click();
+  expect(await page.evaluate(() => window.__a11y)).toBe(1);
+  await page.evaluate(() => { window.__canSleep = true; });
+  await follow(page, true);
+  await expect(page.locator('#ukSleep')).toBeHidden();
 });
