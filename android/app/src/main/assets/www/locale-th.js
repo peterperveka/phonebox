@@ -110,6 +110,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.unlockPc": "ปลดล็อกพีซี",
       "unlock.setup": "ตั้งค่าการปลดล็อกด้วยลายนิ้วมือ",
       "unlock.failed": "ไม่ได้ปลดล็อก",
+      "unlock.touch": "แตะเซ็นเซอร์เพื่อปลดล็อกพีซี",
       "unlock.compare": "เปรียบเทียบรหัสนี้กับ \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\" บนพีซี",
       "s.unlock.enabled": "ปลดล็อกด้วยลายนิ้วมือจากโทรศัพท์ (sudo, หน้าต่างรหัสผ่านอย่าง 1Password และหน้าจอล็อก GNOME; Linux)",
       "panel.oneOfN": "1 ของ {n}",

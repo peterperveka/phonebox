@@ -2,11 +2,12 @@
 // text comes from the app's unlockPrompt, never from the agent; Use password cancels, the screen button signs "screen".
 const { test, expect } = require('@playwright/test');
 
-async function open(page, { state, supported = true, prompt = '{"title":"sudo from the app","detail":"detail from the app"}', code = 'ABC123', android = true }) {
-  await page.addInitScript(({ supported, prompt, code, android }) => {
+async function open(page, { state, supported = true, prompt = '{"title":"sudo from the app","detail":"detail from the app"}', code = 'ABC123', android = true, listen = false }) {
+  await page.addInitScript(({ supported, prompt, code, android, listen }) => {
     window.__phoneboxKey = 'k';
     window.__signs = [];
     window.__setups = 0;
+    window.__listens = [];
     if (!android) return;
     window.Android = {
       unlockSupported: () => supported,
@@ -15,7 +16,8 @@ async function open(page, { state, supported = true, prompt = '{"title":"sudo fr
       unlockPrompt: () => prompt,
       unlockSign: (key, id, challenge, mode) => { window.__signs.push({ key, id, challenge, mode }); },
     };
-  }, { supported, prompt, code, android });
+    if (listen) window.Android.unlockListen = (key, on) => { window.__listens.push(on); };
+  }, { supported, prompt, code, android, listen });
   await page.goto('/panel/');
   await expect(page.locator('#dots i')).not.toHaveCount(0);
   await page.evaluate(async (state) => {
@@ -121,4 +123,53 @@ test('the card buttons come back after a failed signing', async ({ page }) => {
   await page.evaluate(() => window.pbUnlockDone('r1', false));
   await expect(page.locator('#ukPw')).toBeEnabled();
   await expect(page.locator('#ukFp')).toBeEnabled();
+});
+
+// ---------------------------------------------------------------- touch to unlock: the app listens on the sensor, no dialog
+const locked = () => ({ enabled: true, enrolled: true, locked: true, screen: 'scr', request: null });
+const reload = (page, change) => page.evaluate(async (change) => {
+  Object.assign(window.__state, change);
+  const m = await import('/panel/main.js');
+  await m.loadUnlock();
+}, change);
+
+test('while the PC is locked the app is asked to listen and the touch hint shows', async ({ page }) => {
+  await open(page, { state: locked(), listen: true });
+  expect(await page.evaluate(() => window.__listens)).toEqual([true]);
+  await page.evaluate(() => window.pbUnlockListen('listening'));
+  await expect(page.locator('#ukTouch')).toHaveText('Touch the sensor to unlock the PC');
+  await expect(page.locator('#ukTouch')).toBeVisible();
+  await expect(page.locator('#ukScreen')).toBeHidden();
+});
+
+test('stopped brings the Unlock PC button back', async ({ page }) => {
+  await open(page, { state: locked(), listen: true });
+  await page.evaluate(() => { window.pbUnlockListen('listening'); window.pbUnlockListen('stopped'); });
+  await expect(page.locator('#ukScreen')).toBeVisible();
+  await expect(page.locator('#ukTouch')).toBeHidden();
+});
+
+test('unlocking the PC stops listening', async ({ page }) => {
+  await open(page, { state: locked(), listen: true });
+  await reload(page, { locked: false, screen: null });
+  expect(await page.evaluate(() => window.__listens)).toEqual([true, false]);
+});
+
+test('a sudo card stops listening', async ({ page }) => {
+  await open(page, { state: locked(), listen: true });
+  await reload(page, { request: { id: 'r', challenge: 'c' } });
+  expect(await page.evaluate(() => window.__listens)).toEqual([true, false]);
+});
+
+test('failed shows Not unlocked and keeps listening', async ({ page }) => {
+  await open(page, { state: locked(), listen: true });
+  await page.evaluate(() => { window.pbUnlockListen('listening'); window.pbUnlockListen('failed'); });
+  await expect(page.locator('#ukMsg')).toHaveText('Not unlocked');
+  expect(await page.evaluate(() => window.__listens)).toEqual([true]);
+});
+
+test('an app without unlockListen keeps the Unlock PC button', async ({ page }) => {
+  await open(page, { state: locked() });
+  await expect(page.locator('#ukScreen')).toBeVisible();
+  await expect(page.locator('#ukTouch')).toBeHidden();
 });

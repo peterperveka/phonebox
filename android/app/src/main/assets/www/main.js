@@ -64,7 +64,7 @@ export const $ = (id) => document.getElementById(id);
 // the panel's own frames receive (MainActivity.bridgeKey). This wrapper adds it.
 const BRIDGE = ['battery', 'buzz', 'haptic', 'is24Hour', 'pcs', 'selectPc', 'forgetPc', 'setBrightness', 'setHomeScreen', 'setOrientation',
   'setPinned', 'setVolumeKeys', 'setStandby', 'setLanguage', 'transport', 'sensors', 'version', 'canListen', 'listen', 'stopListening', 'cancelListening', 'trackpad', 'canWake', 'wakePc', 'openBridge',
-  'unlockSupported', 'unlockSetup', 'unlockCode', 'unlockPrompt', 'unlockSign'];
+  'unlockSupported', 'unlockSetup', 'unlockCode', 'unlockPrompt', 'unlockSign', 'unlockListen'];
 export const bridge = typeof Android === 'undefined' ? null : Object.fromEntries(BRIDGE.filter((m) => typeof Android[m] === 'function')
   .map((m) => [m, (...args) => Android[m](window.__phoneboxKey || '', ...args)]));
 // Live preview inside the agent's layout editor: the layout comes from the editor (unsaved), not from the agent.
@@ -1429,6 +1429,8 @@ let unlockSigning = false;
 let codeMissing = null;   // cached: does this phone lack a usable key? Refreshed on setup, wake and when enrolled changes
 let codeFor;               // the `enrolled` value the cache was read for
 let unlockMsgTimer = 0;
+let listenWanted = false; // touch to unlock: what the app was last told (listen on the sensor or not)
+let listenStopped = false; // the app reported that Android stopped the sensor: the Unlock PC button is back
 
 export async function loadUnlock() {
   if (PREVIEW || unlockBusy || !bridge || typeof bridge.unlockSupported !== 'function') return;
@@ -1463,7 +1465,7 @@ function refreshUnlockCode(enrolled = codeFor) {
 export function renderUnlock() {
   const s = unlockState && unlockState.enabled ? unlockState : null;
   const card = $('unlockCard'), bar = $('unlockBar');
-  if (!s) { card.hidden = bar.hidden = true; unlockShown = null; unlockPromptText = null; return; }
+  if (!s) { card.hidden = bar.hidden = true; unlockShown = null; unlockPromptText = null; setListen(false); return; }
   // the phone card for a pending request
   const r = s.request;
   if (!r) { unlockShown = null; unlockPromptText = null; }
@@ -1490,7 +1492,11 @@ export function renderUnlock() {
   const showScreen = !!(s.locked && s.screen);
   if (codeFor !== s.enrolled) refreshUnlockCode(s.enrolled);
   const setup = !s.enrolled || codeMissing === true;
-  $('ukScreen').hidden = !showScreen;
+  // touch to unlock: the app listens on the sensor while the PC is locked and no request card needs the sensor
+  setListen(showScreen && !r && typeof bridge.unlockListen === 'function');
+  const touch = listenWanted && !listenStopped;
+  $('ukTouch').hidden = !touch;
+  $('ukScreen').hidden = !showScreen || touch;
   $('ukSetup').hidden = !setup;
   $('ukMsg').hidden = !$('ukMsg').textContent;
   bar.hidden = !(showScreen || setup || $('ukMsg').textContent);
@@ -1528,6 +1534,21 @@ $('ukSetup').addEventListener('click', () => {
   // the code is shown for 30 s so it can be compared with the one the PC prints
   unlockMessage(code ? `${code} · ${t('unlock.compare')}` : t('unlock.failed'), code ? 30000 : 4000);
 });
+function setListen(on) {
+  if (on === listenWanted) return;
+  listenWanted = on;
+  listenStopped = false;
+  try { bridge.unlockListen(on); } catch (_) {}
+}
+
+// the app reports touch-to-unlock: "listening", "unlocked", "failed" (the PC refused; it listens on), "stopped"
+window.pbUnlockListen = (state) => {
+  if (state === 'stopped') { listenStopped = true; renderUnlock(); }
+  else if (state === 'listening') { listenStopped = false; renderUnlock(); }
+  else if (state === 'failed') unlockMessage(t('unlock.failed'), 4000);
+  else if (state === 'unlocked') loadUnlock();
+};
+
 // the app reports the end of every unlockSign. On failure the app has already cancelled a phone request itself, so the
 // next fetch drops the card; there is no retry here.
 window.pbUnlockDone = (id, ok) => {

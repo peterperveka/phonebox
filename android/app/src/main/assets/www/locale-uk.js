@@ -110,6 +110,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.unlockPc": "Розблокувати ПК",
       "unlock.setup": "Налаштувати розблокування відбитком",
       "unlock.failed": "Не розблоковано",
+      "unlock.touch": "Торкніться сенсора, щоб розблокувати ПК",
       "unlock.compare": "Порівняйте цей код із \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\" на ПК",
       "s.unlock.enabled": "Розблокування відбитком з телефона (sudo, вікна пароля на кшталт 1Password та екран блокування GNOME; Linux)",
       "panel.oneOfN": "1 з {n}",

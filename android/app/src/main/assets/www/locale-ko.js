@@ -110,6 +110,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.unlockPc": "PC 잠금 해제",
       "unlock.setup": "지문 잠금 해제 설정",
       "unlock.failed": "잠금 해제되지 않음",
+      "unlock.touch": "센서를 터치하여 PC 잠금 해제",
       "unlock.compare": "이 코드를 PC의 \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\"과 비교하세요",
       "s.unlock.enabled": "휴대폰 지문으로 잠금 해제(sudo, 1Password 같은 비밀번호 창, GNOME 잠금 화면, Linux)",
       "panel.oneOfN": "1의 {n}",

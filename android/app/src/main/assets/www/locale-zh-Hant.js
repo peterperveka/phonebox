@@ -131,6 +131,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "unlock.unlockPc": "解鎖電腦",
       "unlock.setup": "設定指紋解鎖",
       "unlock.failed": "未解鎖",
+      "unlock.touch": "觸碰感應器以解鎖電腦",
       "unlock.compare": "將此代碼與電腦上的 \"sudo /usr/local/lib/phonebox/phonebox-unlock enroll\" 比對",
       "s.unlock.enabled": "以手機指紋解鎖(sudo、1Password 等密碼對話框以及 GNOME 鎖定畫面;Linux)",
       "time.now": "現在",

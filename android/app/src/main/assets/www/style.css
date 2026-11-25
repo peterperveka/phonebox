@@ -1553,7 +1553,7 @@ html.beat-4 .w-onair.on .oa-sign { box-shadow: 0 0 34px rgba(239, 68, 68, .9); }
 #unlockCard .ap-detail { flex: 0 1 auto; white-space: pre-wrap; }
 #unlockCard .ap-btn { flex: 1; min-width: 0; }
 #unlockBar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 89; max-width: 92%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-#ukMsg { padding: 8px 12px; border-radius: 12px; background: #10131a; border: 1px solid var(--line); font-size: 13px; text-align: center; }
+#ukMsg, #ukTouch { padding: 8px 12px; border-radius: 12px; background: #10131a; border: 1px solid var(--line); font-size: 13px; text-align: center; }
 #unlockBar .ap-btn { min-width: 0; }
 .ap-btn:active { transform: scale(.96); }
 .ap-btn:disabled { opacity: .4; }
