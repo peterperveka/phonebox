@@ -25,6 +25,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.text.format.DateFormat
+import android.util.Base64
 import android.util.Log
 import android.view.Gravity
 import android.view.InputDevice
@@ -81,6 +82,8 @@ class MainActivity : Activity(), SensorEventListener {
     private lateinit var stream: AgentStream
     @Volatile private var resumed = false
     @Volatile private var volumeKeysFlipPages = true
+    /** True while a fingerprint unlock (prompt + answer) is in progress; a second one is ignored. */
+    private val unlockBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private val sensors by lazy { getSystemService(Context.SENSOR_SERVICE) as SensorManager? }
     private var lastLux = -1f
     private var lastLuxAt = 0L
@@ -873,6 +876,105 @@ class MainActivity : Activity(), SensorEventListener {
         /** Whether the volume keys flip pages (true) or change the phone's volume (false). */
         @JavascriptInterface
         fun setVolumeKeys(key: String, enabled: Boolean) { if (ok(key)) volumeKeysFlipPages = enabled }
+
+        // Phone fingerprint unlock (Android 9+): a Keystore key that signs one-time challenges only inside a
+        // fingerprint prompt (UnlockKey). What is signed, and what the prompt says, comes from the challenge alone.
+
+        /** True when this phone can hold an unlock key (Android 9+). */
+        @JavascriptInterface
+        fun unlockSupported(key: String): Boolean = ok(key) && Build.VERSION.SDK_INT >= 28
+
+        /** Creates a new unlock key and enrolls it with the agent; returns its check code, or "" on failure. */
+        @JavascriptInterface
+        fun unlockSetup(key: String): String {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
+            val unlock = UnlockKey(this@MainActivity)
+            val spki = try { unlock.create() } catch (e: Exception) {
+                // e.g. no fingerprint enrolled on the phone
+                Log.w("PhoneBox", "unlock key creation failed: ${e.javaClass.simpleName}: ${e.message}")
+                return ""
+            }
+            val body = JSONObject().put("publicKey", Base64.encodeToString(spki, Base64.NO_WRAP)).toString()
+            val code = post("/api/unlock/enroll", body)
+            if (code != 200) {
+                Log.w("PhoneBox", "unlock enroll failed: HTTP $code")
+                unlock.remove() // not known to the agent: the panel offers setup again
+                return ""
+            }
+            return UnlockChallenge.checkCode(spki)
+        }
+
+        /** Check code of the existing unlock key, or "" when there is none (or it was invalidated and deleted). */
+        @JavascriptInterface
+        fun unlockCode(key: String): String {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
+            val unlock = UnlockKey(this@MainActivity)
+            if (!unlock.exists() || !unlock.usable()) return ""
+            return unlock.publicKey()?.let { UnlockChallenge.checkCode(it) } ?: ""
+        }
+
+        /** The prompt text for a challenge, {"title","detail"}, or "" if it is not a valid challenge. */
+        @JavascriptInterface
+        fun unlockPrompt(key: String, challenge: String): String {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return ""
+            val p = UnlockChallenge.parse(challenge) ?: return ""
+            return JSONObject().put("title", UnlockChallenge.promptTitle(p))
+                .put("detail", UnlockChallenge.promptDetail(p) ?: JSONObject.NULL).toString()
+        }
+
+        /**
+         * Asks for a fingerprint and signs [challenge]: a sudo/polkit request card ([mode] "request", answered to
+         * /api/unlock/answer under [id]) or the Unlock PC button ("screen", /api/unlock/screen). The result arrives
+         * through window.pbUnlockDone(id, ok). A second call while one is in progress is ignored.
+         */
+        @JavascriptInterface
+        fun unlockSign(key: String, id: String, challenge: String, mode: String) {
+            if (!ok(key) || Build.VERSION.SDK_INT < 28) return
+            if (mode != UnlockChallenge.MODE_REQUEST && mode != UnlockChallenge.MODE_SCREEN) return
+            if (!unlockBusy.compareAndSet(false, true)) return
+            val parts = UnlockChallenge.parse(challenge)
+            if (parts == null || !UnlockChallenge.acceptable(parts, mode, System.currentTimeMillis())) {
+                Log.w("PhoneBox", "unlock challenge refused")
+                unlockFinish(id, mode, null, challenge)
+                return
+            }
+            runOnUiThread {
+                if (destroyed || isFinishing) { unlockBusy.set(false); return@runOnUiThread }
+                UnlockKey(this@MainActivity).sign(challenge, UnlockChallenge.promptTitle(parts), UnlockChallenge.promptDetail(parts)) { sig ->
+                    unlockFinish(id, mode, sig, challenge)
+                }
+            }
+        }
+
+        /** Sends the answer off the UI thread, then reports to the panel and frees [unlockBusy]. */
+        private fun unlockFinish(id: String, mode: String, signature: String?, challenge: String) {
+            Thread {
+                var done = false
+                try {
+                    if (mode == UnlockChallenge.MODE_REQUEST) {
+                        // a null signature declines, so the computer stops waiting at once
+                        val body = JSONObject().put("id", id).put("signature", signature ?: JSONObject.NULL).toString()
+                        done = post("/api/unlock/answer", body) == 200 && signature != null
+                    } else if (signature != null) {
+                        val body = JSONObject().put("challenge", challenge).put("signature", signature).toString()
+                        done = post("/api/unlock/screen", body) == 200
+                    }
+                } catch (e: Exception) {
+                    Log.w("PhoneBox", "unlock answer failed: ${e.javaClass.simpleName}")
+                } finally {
+                    unlockBusy.set(false)
+                    val js = "window.pbUnlockDone && window.pbUnlockDone(${JSONObject.quote(id)}, $done)"
+                    runOnUiThread { if (!destroyed) web.evaluateJavascript(js, null) }
+                }
+            }.start()
+        }
+
+        /** POSTs JSON to the agent (blocking) and returns the HTTP status. */
+        private fun post(path: String, json: String): Int {
+            val r = link.request("POST", path, json.toByteArray(Charsets.UTF_8), "application/json")
+            try { r.body.close() } catch (_: Exception) {}
+            return r.code
+        }
 
         /** Whether the phone is set to 24-hour time (Settings › System › Date & time). */
         @JavascriptInterface
