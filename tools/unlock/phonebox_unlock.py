@@ -7,13 +7,14 @@ root-owned key in KEY_DIR. Exit 0 = accept; anything else = PAM goes on to the p
 Every error path returns 1 and prints nothing.
 
     phonebox-unlock           PAM flow (PAM_SERVICE sudo / sudo-i / polkit-1)
-    sudo phonebox-unlock enroll   store the agent's paired phone key for $SUDO_USER
+    sudo /usr/local/lib/phonebox/phonebox-unlock enroll   store the agent's paired phone key for $SUDO_USER
 """
 import base64
 import hashlib
 import http.client
 import json
 import os
+import pwd
 import re
 import secrets
 import select
@@ -40,6 +41,8 @@ SUDO_WAIT = 20
 POLKIT_WAIT = 10
 EXPIRY_MS = 30_000
 LOGINCTL = "/usr/bin/loginctl"
+PROC = "/proc"
+MAX_HOPS = 8
 PREFIX = "phonebox-unlock-v1"
 PROMPT = "Touch the sensor on the phone, or press Enter to type the password."
 MAX_COMMAND = 120
@@ -48,6 +51,8 @@ MAX_BODY = 8192
 
 _USER_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.@-]{0,62}\$?")
 _STRIP_CATEGORIES = {"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"}
+_SESSION_SCOPE_RE = re.compile(r"/session-([A-Za-z0-9]+)\.scope(?:/|$)")
+_USER_MANAGER_RE = re.compile(r"/user-(\d+)\.slice/user@(\d+)\.service(?:/|$)")
 
 
 def now_ms() -> int:
@@ -59,15 +64,21 @@ def _clean(text: str, limit: int) -> str:
     return kept[:limit] or "-"
 
 
+def _clean_command(text: str) -> str:
+    """Like _clean, but a command cut at MAX_COMMAND ends in '…' (still at most MAX_COMMAND chars)."""
+    kept = _clean(text, len(text) + 1)
+    return kept if len(kept) <= MAX_COMMAND else kept[:MAX_COMMAND - 1] + "\u2026"
+
+
 def clean_command(raw: bytes) -> str:
-    """/proc/<pid>/cmdline bytes -> one line: NUL -> space, no '|' or control chars, at most 120 chars."""
-    return _clean(raw.replace(b"\x00", b" ").decode("utf-8", errors="replace"), MAX_COMMAND)
+    """/proc/<pid>/cmdline bytes -> one line: NUL -> space, no '|' or control chars, at most 120 chars ('…' if cut)."""
+    return _clean_command(raw.replace(b"\x00", b" ").decode("utf-8", errors="replace"))
 
 
 def make_challenge(purpose: str, user: str, host: str, command: str, now_ms: int) -> str:
     if purpose not in ("sudo", "polkit"):
         raise ValueError("purpose")
-    cmd = "-" if purpose == "polkit" else _clean(command, MAX_COMMAND)
+    cmd = "-" if purpose == "polkit" else _clean_command(command)
     return "|".join((PREFIX, purpose, _clean(user, MAX_FIELD), _clean(host, MAX_FIELD), cmd,
                      secrets.token_hex(32), str(int(now_ms) + EXPIRY_MS)))
 
@@ -177,6 +188,66 @@ def is_locked(user: str) -> bool:
         return True
 
 
+def _parent_pid(pid: int) -> int:
+    with open(f"{PROC}/{pid}/stat", "rb") as f:
+        data = f.read(4096).decode("ascii", errors="replace")
+    return int(data[data.rindex(")") + 1:].split()[1])  # after "(comm)": state, ppid, ...
+
+
+def requester(pid: int):
+    """Where the process asking for authentication runs, walking up its parents (at most MAX_HOPS):
+    ("session", id) for a logind session scope, ("user", uid) for the user's systemd manager (GNOME starts
+    terminals and gnome-shell there), or None. Raises on unreadable /proc."""
+    for _ in range(MAX_HOPS):
+        if pid <= 1:
+            return None
+        with open(f"{PROC}/{pid}/cgroup", "rb") as f:
+            text = f.read(4096).decode("utf-8", errors="replace")
+        for line in text.splitlines():
+            path = line.split(":", 2)[-1]
+            m = _SESSION_SCOPE_RE.search(path)
+            if m:
+                return ("session", m.group(1))
+            m = _USER_MANAGER_RE.search(path)
+            if m and m.group(1) == m.group(2):
+                return ("user", int(m.group(1)))
+        pid = _parent_pid(pid)
+    return None
+
+
+def _session_props(session: str) -> dict:
+    out = _loginctl("show-session", session, "-p", "Remote", "-p", "Type")
+    return dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+
+
+def remote_reason(m: str, user: str, pid: int):
+    """None when the request comes from a local session of `user`; "remote" otherwise (SSH, no session found,
+    any error). polkit needs a graphical session (wayland/x11); so does the user-manager case, which is vouched
+    for by the user's graphical Display session."""
+    try:
+        found = requester(pid)
+        if found is None:
+            return "remote"
+        kind, ident = found
+        if kind == "user":
+            if ident != pwd.getpwnam(user).pw_uid:
+                return "remote"
+            session = _loginctl("show-user", user, "-p", "Display", "--value")
+            if not session:
+                return "remote"
+            graphical = True
+        else:
+            session, graphical = ident, m == "polkit"
+        props = _session_props(session)
+        if props.get("Remote") != "no":
+            return "remote"
+        if graphical and props.get("Type") not in ("wayland", "x11"):
+            return "remote"
+        return None
+    except Exception:
+        return "remote"
+
+
 def open_tty(pam_tty: str) -> int:
     path = os.path.normpath(pam_tty if pam_tty.startswith("/dev/") else "/dev/" + pam_tty)
     if not path.startswith("/dev/"):
@@ -260,6 +331,8 @@ def _pam(env: dict) -> int:
         return 1
     if skip_reason(env, True, is_locked(user)) is not None:
         return 1
+    if remote_reason(m, user, os.getppid()) is not None:  # sudo leaves PAM_RHOST unset, even over SSH
+        return 1
     host = socket.gethostname()
     if m == "polkit":
         return _ask_phone(make_challenge("polkit", user, host, "-", now_ms()), key, POLKIT_WAIT, None)
@@ -289,7 +362,8 @@ def _fail(message: str) -> int:
 def _enroll(env: dict) -> int:
     """Interactive (run with sudo): fetch the paired phone key from the agent and store it for $SUDO_USER."""
     if os.geteuid() != 0:
-        print("phonebox-unlock enroll must run as root: sudo phonebox-unlock enroll", file=sys.stderr)
+        print("phonebox-unlock enroll must run as root: sudo /usr/local/lib/phonebox/phonebox-unlock enroll",
+              file=sys.stderr)
         return 2
     user = env.get("SUDO_USER")
     if not valid_user(user) or user == "root":

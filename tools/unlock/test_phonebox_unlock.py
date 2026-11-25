@@ -107,7 +107,8 @@ class Base(unittest.TestCase):
         self.keyfile = path
         for p in (mock.patch.object(pu, "KEY_DIR", self.tmp.name),
                   mock.patch.object(pu, "KEY_OWNER_UID", os.geteuid()),
-                  mock.patch.object(pu, "is_locked", lambda user: False)):
+                  mock.patch.object(pu, "is_locked", lambda user: False),
+                  mock.patch.object(pu, "remote_reason", lambda m, user, pid: None)):
             p.start()
             self.addCleanup(p.stop)
         self.addCleanup(self.tmp.cleanup)
@@ -143,7 +144,13 @@ class PureFunctions(unittest.TestCase):
     def test_clean_command(self):
         self.assertEqual(pu.clean_command(b"sudo\x00dnf\x00a|b"), "sudo dnf ab")
         self.assertEqual(pu.clean_command(b"sudo\x00ls\x00"), "sudo ls")
-        self.assertEqual(len(pu.clean_command(b"x" * 300)), 120)
+        cut = pu.clean_command(b"x" * 300)
+        self.assertEqual(len(cut), 120)
+        self.assertEqual(cut, "x" * 119 + "\u2026")
+        self.assertEqual(pu.clean_command(b"y" * 120), "y" * 120)
+        self.assertEqual(pu.clean_command(b"a|" * 130), "a" * 119 + "\u2026")
+        ch = pu.make_challenge("sudo", "alice", "box", "z" * 200, 0).split("|")
+        self.assertEqual(ch[4], "z" * 119 + "\u2026")
         self.assertEqual(pu.clean_command(b"a\nb\x1b[31mc\x7f"), "ab[31mc")
         self.assertEqual(pu.clean_command(b""), "-")
 
@@ -357,6 +364,18 @@ class SudoFlow(Base):
         with mock.patch.object(pu, "is_locked", lambda user: True):
             self.assert_skipped(env)
 
+    def test_remote_requester_skips(self):
+        _, env = self.pty_env()
+        seen = []
+
+        def remote(m, user, pid):
+            seen.append((m, user, pid))
+            return "remote"
+        with mock.patch.object(pu, "remote_reason", remote):
+            self.assert_skipped(env)
+            self.assert_skipped(PolkitFlow.env)
+        self.assertEqual(seen, [("sudo", "alice", os.getppid()), ("polkit", "alice", os.getppid())])
+
     def test_tty_outside_dev_is_refused(self):
         env = {"PAM_SERVICE": "sudo", "PAM_USER": "alice", "PAM_TTY": "/dev/../tmp/x"}
         with mock.patch("http.client.HTTPConnection") as http, mock.patch("os.open", wraps=os.open) as op:
@@ -449,6 +468,115 @@ class PolkitFlow(Base):
         self.addCleanup(agent.close)
         with mock.patch.object(pu, "AGENT_PORT", agent.port):
             self.assertEqual(pu.main(["x"], dict(self.env)), 1)
+
+
+class RemoteRequester(unittest.TestCase):
+    """remote_reason: walk /proc parents to the requester's logind session; anything but a local one skips."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        p = mock.patch.object(pu, "PROC", self.tmp.name)
+        p.start()
+        self.addCleanup(p.stop)
+        self.calls = []
+        self.props = {}
+
+    def proc(self, pid, ppid, cgroup, comm="x (y) z"):
+        d = os.path.join(self.tmp.name, str(pid))
+        os.makedirs(d)
+        with open(os.path.join(d, "stat"), "w") as f:
+            f.write(f"{pid} ({comm}) S {ppid} {pid} {pid} 0 -1\n")
+        with open(os.path.join(d, "cgroup"), "w") as f:
+            f.write(f"0::{cgroup}\n")
+
+    def loginctl(self, *args):
+        self.calls.append(args)
+        if args[:2] == ("show-user", "alice"):
+            return self.props.get("display", "")
+        if args[0] == "show-session":
+            remote, typ = self.props[args[1]]
+            return f"Remote={remote}\nType={typ}"
+        raise AssertionError(args)
+
+    def reason(self, m, pid=100, uid=1000):
+        with mock.patch.object(pu, "_loginctl", self.loginctl), \
+                mock.patch("pwd.getpwnam", return_value=mock.Mock(pw_uid=uid)):
+            return pu.remote_reason(m, "alice", pid)
+
+    SSH = "/user.slice/user-1000.slice/session-7.scope"
+    TERMINAL = "/user.slice/user-1000.slice/user@1000.service/app.slice/ptyxis-spawn-1.scope"
+    SHELL = "/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@wayland.service"
+
+    def test_ssh_session_skips(self):
+        self.proc(100, 50, self.SSH)
+        self.props["7"] = ("yes", "tty")
+        self.assertEqual(self.reason("sudo"), "remote")
+        self.assertEqual(self.reason("polkit"), "remote")
+        self.assertIn(("show-session", "7", "-p", "Remote", "-p", "Type"), self.calls)
+
+    def test_local_session_found_up_the_tree(self):
+        self.proc(100, 90, "/system.slice/sudo.scope (not a session)")
+        self.proc(90, 80, "/user.slice/user-1000.slice/session-3.scope")
+        self.props["3"] = ("no", "tty")
+        self.assertIsNone(self.reason("sudo"))
+        self.assertEqual(self.reason("polkit"), "remote")  # a text console is no polkit dialog
+        self.props["3"] = ("no", "wayland")
+        self.assertIsNone(self.reason("polkit"))
+        self.props["3"] = ("no", "x11")
+        self.assertIsNone(self.reason("polkit"))
+
+    def test_desktop_terminal_uses_the_graphical_session(self):
+        # GNOME starts terminals (and polkit's helper parent, gnome-shell) under the user's systemd manager,
+        # outside any session scope: the user's local graphical session vouches for them.
+        self.proc(100, 90, self.TERMINAL)
+        self.props["display"] = "5"
+        self.props["5"] = ("no", "wayland")
+        self.assertIsNone(self.reason("sudo"))
+        self.proc(200, 1, self.SHELL)
+        self.assertIsNone(self.reason("polkit", pid=200))
+
+    def test_user_manager_needs_a_local_graphical_session(self):
+        self.proc(100, 90, self.TERMINAL)
+        self.assertEqual(self.reason("sudo"), "remote")  # no Display session
+        self.props["display"] = "5"
+        self.props["5"] = ("yes", "wayland")
+        self.assertEqual(self.reason("sudo"), "remote")
+        self.props["5"] = ("no", "tty")
+        self.assertEqual(self.reason("sudo"), "remote")
+
+    def test_other_users_manager_skips(self):
+        self.proc(100, 90, "/user.slice/user-1001.slice/user@1001.service/app.slice/x.scope")
+        self.props["display"] = "5"
+        self.props["5"] = ("no", "wayland")
+        self.assertEqual(self.reason("sudo"), "remote")
+
+    def test_no_session_within_eight_hops_skips(self):
+        for pid in range(100, 110):
+            self.proc(pid, pid + 1, "/system.slice/foo.service")
+        self.proc(110, 1, self.SSH)
+        self.props["7"] = ("no", "tty")
+        self.assertEqual(self.reason("sudo"), "remote")
+        self.proc(300, 301, "/system.slice/foo.service")
+        self.proc(301, 302, "/system.slice/foo.service")
+        self.proc(302, 1, "/user.slice/user-1000.slice/session-7.scope")
+        self.assertIsNone(self.reason("sudo", pid=300))
+
+    def test_reaching_init_skips(self):
+        self.proc(100, 1, "/system.slice/polkit-agent-helper@1.service")
+        self.assertEqual(self.reason("polkit"), "remote")
+
+    def test_unreadable_proc_or_loginctl_failure_skips(self):
+        self.assertEqual(self.reason("sudo", pid=4242), "remote")
+        self.proc(100, 50, self.SSH)
+        with mock.patch.object(pu, "_loginctl", side_effect=OSError("no loginctl")):
+            self.assertEqual(pu.remote_reason("sudo", "alice", 100), "remote")
+
+    def test_odd_comm_does_not_confuse_the_parent(self):
+        self.proc(100, 90, "/system.slice/x.service", comm="a) S 1 (b")
+        self.proc(90, 1, "/user.slice/user-1000.slice/session-3.scope")
+        self.props["3"] = ("no", "tty")
+        self.assertIsNone(self.reason("sudo"))
 
 
 class Enroll(Base):
